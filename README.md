@@ -44,7 +44,39 @@ You can use the following commands for quick task execution:
 
 ---
 
-## 🛠 Cloud Deployment (DigitalOcean)
+## � Docker Architecture
+
+The project uses a **decoupled Docker setup** with three separate Dockerfiles and dedicated Docker Compose configurations:
+
+### Dockerfiles
+
+| File | Purpose | Used By |
+| :--- | :--- | :--- |
+| **Dockerfile-app** | Production Go application container | docker-compose-app.yaml (webserver) |
+| **Dockerfile-db** | PostgreSQL database container | docker-compose-db.yaml (dbserver) |
+| **Dockerfile-test** | Testing environment (Go + Python) | docker-compose-tests.yaml (local testing) |
+
+### Docker Compose Files
+
+- **docker-compose-db.yaml**: Database server only (persistent volume for data)
+- **docker-compose-app.yaml**: Application server with remote database connectivity
+- **docker-compose-tests.yaml**: Full stack (db + app + test runner) for local development
+
+### Local Testing (All-in-One)
+
+For local development, run the complete stack:
+```bash
+docker-compose -f docker-compose-tests.yaml up --build
+```
+
+This starts:
+- PostgreSQL database container
+- Go application container
+- Python test simulator container
+
+---
+
+## �🛠 Cloud Deployment (DigitalOcean)
 
 Infrastructure provisioning and application deployment are automated using **Vagrant** with the DigitalOcean provider.
 
@@ -88,6 +120,27 @@ tail -f /var/log/minitwit.log
 
 ---
 
+## 🏗 Design Decisions
+
+### Language: Go
+We chose Go for its simplicity, strong standard library, and excellent performance for web services. Its built-in concurrency model (goroutines), fast compile times, and single-binary output make it well-suited for a containerized, cloud-deployed application like MiniTwit.
+
+### Infrastructure: Two VMs (App + DB)
+We separate the web server and database into two distinct VMs following standard practice. The main benefit is independent scalability: if the app server becomes a bottleneck, we can scale it horizontally without touching the database, and vice versa. This also follows the structure of the provided example Vagrantfile from the course.
+
+### DB Abstraction: GORM
+We use **GORM** as our Object-Relational Mapper (ORM) to abstract database interactions. 
+- **Type Safety**: Instead of raw SQL strings, we interact with Go structs (e.g., `User`, `Message`).
+- **Decoupling**: The application logic remains independent of specific SQL syntax, making it easier to maintain or switch database engines.
+- **Relationships**: GORM handles complex joins and foreign keys using `Preload`, keeping our data fetching logic clean and readable.
+
+### CI/CD: GitHub Actions
+Our project utilizes **GitHub Actions** for an automated pipeline:
+- **Testing**: On every push, we run our test suite using Docker Compose to ensure code quality.
+- **Continuous Deployment**: Successful pushes to the `main` branch trigger a Docker build, which is pushed to Docker Hub and automatically deployed to our DigitalOcean Droplet via SSH.
+- **Releases**: Pushing a version tag (e.g., `v1.0.0`) automatically generates a GitHub Release with automated changelogs.
+---
+
 ## 📂 Project Structure
 
 ```text
@@ -104,3 +157,17 @@ tail -f /var/log/minitwit.log
 └── Vagrantfile      # Infrastructure as Code (IaC) configuration
 └── develop.sh    # for local developemnt
 ```
+
+## GitHub Actions Secrets Configuration
+
+| Secret Name              | Category | Description                                                                                                                                                 |
+|:-------------------------| :--- |:------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **`DOCKERHUB_USERNAME`** | Docker Hub | Your Docker Hub username.                                                                                                                                   |
+| **`DOCKERHUB_TOKEN`**    | Docker Hub | A dedicated Docker Hub Access Token used for authentication.                                                                                                |
+| **`DO_HOST`**            | Production | The IP address of your production DigitalOcean Droplet (triggered by the `main` branch).                                                                    |
+| **`DO_DB`**              | Production | The IP address of your production database server.                                                                                                          |
+| **`DO_USER`**            | SSH Auth | The SSH username used to log into the DigitalOcean servers (e.g., `root`). This is shared between production and staging environments.                      |
+| **`DO_SSH_KEY`**         | SSH Auth | The SSH Private Key for server authentication. Make sure to paste the entire key block, including `-----BEGIN OPENSSH PRIVATE KEY-----` and the end marker.  This is shared between production and staging environments.|
+| **`DO_DB_STAGE`**        | Staging | The IP address of your staging database server.                                                                                                             |
+| **`DO_HOST_STAGE`**      | Staging | The IP address of your staging DigitalOcean Droplet (triggered by pull requests or test branches).                                                          |
+| **`DO_SSH_KEY_STAGE`**   | SSH Auth | The SSH Private Key for server authentication. Make sure to paste the entire key block, including `-----BEGIN OPENSSH PRIVATE KEY-----` and the end marker.  This is shared between production and staging environments.|
