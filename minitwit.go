@@ -284,6 +284,7 @@ func add_message(c *gin.Context) {
 		msg := Message{AuthorID: user.UserID, Text: text, PubDate: time.Now().Unix(), Flagged: 0}
 		if err := db.Create(&msg).Error; err == nil {
 			session := sessions.Default(c)
+			messagesPostedTotal.Inc() // Prometheus logging.
 			session.AddFlash("Your message was recorded")
 			session.Save()
 		}
@@ -363,6 +364,7 @@ func registerPost(c *gin.Context) {
 		return
 	}
 
+	registrationsTotal.Inc() // Prometheus logging
 	c.Redirect(http.StatusFound, "/login")
 }
 
