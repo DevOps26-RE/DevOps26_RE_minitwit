@@ -5,3 +5,12 @@ services:
       DB_ADDR: ${DB_ADDR:-localhost}
     ports:
       - "5001:5001"
+  prometheus:
+      image: prom/prometheus:latest
+      volumes:
+        - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+        - prometheus_data:/prometheus
+      ports:
+        - "127.0.0.1:9090:9090"
+      depends_on:
+        - web
