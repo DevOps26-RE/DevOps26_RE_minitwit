@@ -32,9 +32,7 @@ services:
   test:
     build:
       context: .
-      dockerfile: docker/Dockerfile-tests
-      args:
-        GO_VERSION: "1.25.0"
+      dockerfile: docker/Dockerfile-test
     depends_on:
       - web
-    entrypoint: ["python3", "./test/minitwit_simulator.py", "http://web:5001/api"]
+    entrypoint: ["python", "test/minitwit_simulator.py", "http://web:5001/api"]
