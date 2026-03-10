@@ -12,9 +12,12 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -40,12 +43,12 @@ type Message struct {
 	Author    User   `gorm:"foreignKey:AuthorID;references:UserID"`
 }
 
-func (Message) TableName() string  { return "messages" }
-func (User) TableName() string     { return "users" }
+func (Message) TableName() string { return "messages" }
+func (User) TableName() string    { return "users" }
 
 type Follower struct {
-	WhoID  int `gorm:"column:who_id"`
-	WhomID int `gorm:"column:whom_id"`
+	WhoID  int  `gorm:"column:who_id"`
+	WhomID int  `gorm:"column:whom_id"`
 	Whom   User `gorm:"foreignKey:WhomID"`
 }
 
@@ -64,6 +67,8 @@ func main() {
 
 func create_app() *gin.Engine {
 	router := gin.Default()
+
+	router.Use(PrometheusMiddleware())
 	store := cookie.NewStore([]byte(SECRET_KEY))
 	store.Options(sessions.Options{
 		Path:     "/",
@@ -99,6 +104,8 @@ func create_app() *gin.Engine {
 		api.GET("/fllws/:username", get_follow)
 		api.POST("/fllws/:username", post_follow)
 	}
+
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	router.GET("/register", registerGet)
 	router.POST("/register", registerPost)
@@ -385,5 +392,3 @@ func render(c *gin.Context, code int, name string, data gin.H) {
 	}
 	c.HTML(code, name, data)
 }
-
-
