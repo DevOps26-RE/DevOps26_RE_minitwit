@@ -1,7 +1,33 @@
 services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      # Traefik will open an entry called "web", listen to 5001 Port in the docker container
+      - "--entrypoints.web.address=:5001"
+    ports:
+      # Traefik will occupied the 5001 port on the server
+      - "5001:5001"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
   web:
     image: ${DOCKER_IMAGE:-runtimeerroritu/minitwit:latest}
     environment:
-      DB_ADDR: ${DB_ADDR:-localhost}
-    ports:
-      - "5001:5001"
+      DB_ADDR: ${DB_ADDR}
+      # Note: can't add port here, so it will use Traefik
+    labels:
+      - "traefik.enable=true"
+      # find the entry "web"
+      - "traefik.http.routers.myweb.entrypoints=web"
+      # accept all path from the router
+      - "traefik.http.routers.myweb.rule=PathPrefix(`/`)"
+      # tell Traefik which port will Go app use inside the container
+      - "traefik.http.services.myweb.loadbalancer.server.port=5001"
+    deploy:
+      update_config:
+        # Zero down time key point: start a new container -> redirect the traffic -> close the old container
+        order: start-first
+        failure_action: rollback
+        delay: 5s
