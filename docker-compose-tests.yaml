@@ -1,6 +1,6 @@
 services:
   db:
-    build:
+    image: postgres:15-alpine
       context: .
       dockerfile: docker/Dockerfile-db
     environment:
