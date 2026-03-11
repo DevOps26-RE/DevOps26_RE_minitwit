@@ -108,8 +108,10 @@ jobs:
             # Navigate to the new deployment directory instead of /vagrant
             cd /opt/minitwit
             
-            export DB_ADDR=$DB_ADDR
-            export DOCKER_IMAGE=$DOCKER_IMAGE
+            echo "DOCKER_IMAGE=${DOCKER_IMAGE}" > .env
+            echo "DB_ADDR=${DB_ADDR}" >> .env
+            
+            echo "Deploying with image: ${DOCKER_IMAGE}"
             
             docker compose -f docker-compose-app.yaml pull
             docker compose -f docker-compose-app.yaml up -d
