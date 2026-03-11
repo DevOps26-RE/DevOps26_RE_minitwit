@@ -57,8 +57,10 @@ jobs:
           context: .
           file: docker/Dockerfile-app
           push: true
-          build-args: GO_VERSION=1.25.0
           tags: ${{ steps.prepare.outputs.docker_tags }}
+          # add github action cache to store the installed pacakge in the repo cache space, tasks will be skipped next time if the relative files are not changed
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Comment on PR
         # Only execute this step during a Pull Request
@@ -108,3 +110,6 @@ jobs:
             
             docker compose -f docker-compose-app.yaml pull
             docker compose -f docker-compose-app.yaml up -d
+            
+            # clean up the old docker images
+            docker image prune -f
