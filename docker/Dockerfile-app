@@ -16,8 +16,10 @@ FROM cgr.dev/chainguard/glibc-dynamic
 
 WORKDIR /app
 
-# Only copy the compiled executable from the builder stage; discard source code and build tools
+# Only copy the compiled executable and needed files from the builder stage; discard source code and build tools
 COPY --from=builder /app/minitwit .
+COPY --from=builder /app/templates ./templates
+COPY --from=builder /app/static ./static
 
 EXPOSE 5001
 
