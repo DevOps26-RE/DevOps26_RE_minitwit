@@ -1,17 +1,23 @@
-FROM cgr.dev/chainguard/go
+# Build Environment (Builder)
+FROM cgr.dev/chainguard/go AS builder
 
-# Set working directory
 WORKDIR /app
 
 # Copy module files and download dependencies first for better layer caching
 COPY go.mod go.sum* ./
 RUN go mod download
 
-# Copy the rest of the source code
+# Copy the source code and compile the application
 COPY . .
-
-# Build the application
 RUN go build -o minitwit .
+
+# Minimal Runtime Environment, use an extremely lightweight and clean base image to run the application
+FROM cgr.dev/chainguard/glibc-dynamic
+
+WORKDIR /app
+
+# Only copy the compiled executable from the builder stage; discard source code and build tools
+COPY --from=builder /app/minitwit .
 
 EXPOSE 5001
 
