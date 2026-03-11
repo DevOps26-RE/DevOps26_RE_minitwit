@@ -15,5 +15,5 @@ RUN go build -o minitwit .
 
 EXPOSE 5001
 
-# Run the compiled executable
-CMD ["./minitwit"]
+# Safely start the application
+ENTRYPOINT ["./minitwit"]
