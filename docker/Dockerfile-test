@@ -2,10 +2,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY ./test/requirements.txt .
+# Copy requirements first to leverage Docker cache
+COPY test/requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY /test/ ./test/
-
-EXPOSE 5001
+# Copy the test scripts safely using relative paths
+COPY test/ ./test/
