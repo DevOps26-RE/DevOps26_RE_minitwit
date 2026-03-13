@@ -63,8 +63,6 @@ func post_register(c *gin.Context) {
 		return
 	}
 
-	registrationsTotal.Inc() // Prometheus logging
-
 	c.Status(http.StatusNoContent)
 }
 
@@ -135,7 +133,6 @@ func post_messages_per_user(c *gin.Context) {
 		return
 	}
 
-	messagesPostedTotal.Inc() // Prometheus logging
 
 	c.Status(http.StatusNoContent)
 }

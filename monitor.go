@@ -30,18 +30,6 @@ var (
 		},
 		[]string{"method", "path"},
 	)
-
-	// Counts registration events. Useful to track growth over time.
-	registrationsTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "minitwit_registrations_total",
-		Help: "Total number of user registrations",
-	})
-
-	// Counts posted messages.
-	messagesPostedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "minitwit_messages_posted_total",
-		Help: "Total number of messages posted",
-	})
 )
 
 // PrometheusMiddleware records duration and request count for every route.
