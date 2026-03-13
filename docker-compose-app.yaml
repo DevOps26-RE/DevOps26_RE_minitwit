@@ -6,9 +6,13 @@ services:
       - "--providers.docker.exposedbydefault=false"
       # Traefik will open an entry called "web", listen to 5001 Port in the docker container
       - "--entrypoints.web.address=:5001"
+      - "--entrypoints.prom.address=:9090"
+      - "--entrypoints.grafana.address=:3000"
     ports:
       # Traefik will occupied the 5001 port on the server
       - "5001:5001"
+      - "3000:3000"
+      - "9090:9090"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
@@ -33,11 +37,37 @@ services:
         delay: 5s
 
   prometheus:
-      image: prom/prometheus:latest
-      volumes:
-        - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-        - prometheus_data:/prometheus
-      ports:
-        - "127.0.0.1:9090:9090"
-      depends_on:
-        - web
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    # Remove the 'ports' section here! We use Traefik instead.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.myprom.entrypoints=prom"
+      - "traefik.http.routers.myprom.rule=PathPrefix(`/`)"
+      - "traefik.http.services.myprom.loadbalancer.server.port=9090"
+      - "traefik.http.routers.myprom.middlewares=prom-auth"
+      - "traefik.http.middlewares.prom-auth.basicauth.users=admin:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
+    depends_on:
+      - web
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      # Persist Grafana dashboards and configurations
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    labels:
+      - "traefik.enable=true"
+      # Connect Grafana to its specific Traefik entrypoint
+      - "traefik.http.routers.mygrafana.entrypoints=grafana"
+      # Accept all paths for the Grafana UI
+      - "traefik.http.routers.mygrafana.rule=PathPrefix(`/`)"
+      # Tell Traefik to forward traffic to Grafana's internal port 3000
+      - "traefik.http.services.mygrafana.loadbalancer.server.port=3000"
+
+volumes:
+  prometheus_data:
+  grafana_data:
