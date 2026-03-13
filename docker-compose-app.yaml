@@ -37,11 +37,10 @@ services:
         delay: 5s
 
   prometheus:
-    image: prom/prometheus:latest
+    image: ${PROM_IMAGE:-runtimeerroritu/minitwit-prometheus:latest}
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      # Keep ONLY the named volume for data persistence; remove the bind mount
       - prometheus_data:/prometheus
-    # Remove the 'ports' section here! We use Traefik instead.
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.myprom.entrypoints=prom"
