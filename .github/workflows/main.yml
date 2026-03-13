@@ -75,7 +75,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./prometheus
-          file: ./prometheus/Dockerfile
+          file: ./prometheus/Dockerfile-prometheus
           push: true
           # Use the prom_tags output from the prepare step
           tags: ${{ steps.prepare.outputs.prom_tags }}
