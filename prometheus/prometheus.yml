@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s      # how often to scrape targets
+  evaluation_interval: 15s  # how often to evaluate alerting rules
+
+scrape_configs:
+  - job_name: "minitwit"
+    static_configs:
+      - targets: ["web:5001"]   # "web" is the docker-compose service name

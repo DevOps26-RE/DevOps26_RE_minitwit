@@ -132,6 +132,8 @@ func post_messages_per_user(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": 500, "error_msg": err.Error()})
 		return
 	}
+
+
 	c.Status(http.StatusNoContent)
 }
 

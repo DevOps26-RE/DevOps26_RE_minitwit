@@ -31,18 +31,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Prepare environment variables and Docker tags
         id: prepare
+        env:
+          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           # Sanitize branch name replacing slashes with dashes
           BRANCH_NAME=$(echo '${{ github.head_ref || github.ref_name }}' | tr '/' '-')
           
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "docker_tags=${{ secrets.DOCKERHUB_USERNAME }}/minitwit:latest" >> $GITHUB_OUTPUT
-            echo "image_tag=${{ secrets.DOCKERHUB_USERNAME }}/minitwit:latest" >> $GITHUB_OUTPUT
+            # Define tags for BOTH the main app and Prometheus
+            echo "app_tags=${DOCKER_USER}/minitwit:latest" >> $GITHUB_OUTPUT
+            echo "prom_tags=${DOCKER_USER}/minitwit-prometheus:latest" >> $GITHUB_OUTPUT
+            echo "image_tag=latest" >> $GITHUB_OUTPUT
           else
-            echo "docker_tags=${{ secrets.DOCKERHUB_USERNAME }}/minitwit:test-${BRANCH_NAME},${{ secrets.DOCKERHUB_USERNAME }}/minitwit:test-latest" >> $GITHUB_OUTPUT
-            echo "image_tag=${{ secrets.DOCKERHUB_USERNAME }}/minitwit:test-${BRANCH_NAME}" >> $GITHUB_OUTPUT
+            # Define tags for BOTH the main app and Prometheus for PRs
+            echo "app_tags=${DOCKER_USER}/minitwit:test-${BRANCH_NAME},${DOCKER_USER}/minitwit:test-latest" >> $GITHUB_OUTPUT
+            echo "prom_tags=${DOCKER_USER}/minitwit-prometheus:test-${BRANCH_NAME},${DOCKER_USER}/minitwit-prometheus:test-latest" >> $GITHUB_OUTPUT
+            echo "image_tag=test-${BRANCH_NAME}" >> $GITHUB_OUTPUT
           fi
 
       - name: Login to Docker Hub
@@ -51,17 +60,29 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push main app
         uses: docker/build-push-action@v5
         with:
           context: .
           file: docker/Dockerfile-app
           push: true
-          build-args: GO_VERSION=1.25.0
-          tags: ${{ steps.prepare.outputs.docker_tags }}
+          # Use the app_tags output from the prepare step
+          tags: ${{ steps.prepare.outputs.app_tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Prometheus
+        uses: docker/build-push-action@v5
+        with:
+          context: ./prometheus
+          file: ./prometheus/Dockerfile-prometheus
+          push: true
+          # Use the prom_tags output from the prepare step
+          tags: ${{ steps.prepare.outputs.prom_tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Comment on PR
-        # Only execute this step during a Pull Request
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
@@ -93,18 +114,22 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           DB_ADDR: ${{ github.ref == 'refs/heads/main' && secrets.DO_DB || secrets.DO_DB_STAGE }}
-          DOCKER_IMAGE: ${{ needs.build-and-push.outputs.image_tag }}
+          DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit:${{ needs.build-and-push.outputs.image_tag }}
+          PROM_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit-prometheus:${{ needs.build-and-push.outputs.image_tag }}
         with:
           host: ${{ github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE }}
           username: ${{ secrets.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          envs: DB_ADDR,DOCKER_IMAGE
+          envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE
           script: |
-            # Navigate to the new deployment directory instead of /vagrant
             cd /opt/minitwit
             
-            export DB_ADDR=$DB_ADDR
-            export DOCKER_IMAGE=$DOCKER_IMAGE
+            echo "DOCKER_IMAGE=${DOCKER_IMAGE}" > .env
+            # Write the PROM_IMAGE variable into the .env file on the server
+            echo "PROM_IMAGE=${PROM_IMAGE}" >> .env
+            echo "DB_ADDR=${DB_ADDR}" >> .env
             
             docker compose -f docker-compose-app.yaml pull
             docker compose -f docker-compose-app.yaml up -d
+            
+            docker image prune -f
