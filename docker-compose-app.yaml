@@ -47,7 +47,7 @@ services:
       - "traefik.http.routers.myprom.rule=PathPrefix(`/`)"
       - "traefik.http.services.myprom.loadbalancer.server.port=9090"
       - "traefik.http.routers.myprom.middlewares=prom-auth"
-      - "traefik.http.middlewares.prom-auth.basicauth.users=admin:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
+      - "traefik.http.middlewares.prom-auth.basicauth.users=admin:$$apr1$$DeLv2Ozt$$Eo3rIkwIIqAmpdBKeCNHw1"
     depends_on:
       - web
 
