@@ -19,6 +19,8 @@ services:
       dockerfile: docker/Dockerfile-app
     environment:
       DB_ADDR: db
+    ports:
+      - "5001:5001"
     depends_on:
       db:
         condition: service_healthy
