@@ -31,3 +31,13 @@ services:
         order: start-first
         failure_action: rollback
         delay: 5s
+
+  prometheus:
+      image: prom/prometheus:latest
+      volumes:
+        - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+        - prometheus_data:/prometheus
+      ports:
+        - "127.0.0.1:9090:9090"
+      depends_on:
+        - web

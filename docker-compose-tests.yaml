@@ -30,3 +30,12 @@ services:
     depends_on:
       - web
     entrypoint: ["python", "test/minitwit_simulator.py", "http://web:5001/api"]
+
+  prometheus:
+      image: prom/prometheus:latest
+      volumes:
+        - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      ports:
+        - "127.0.0.1:9090:9090"
+      depends_on:
+        - web

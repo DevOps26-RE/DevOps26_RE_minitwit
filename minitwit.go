@@ -15,6 +15,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -40,12 +42,12 @@ type Message struct {
 	Author    User   `gorm:"foreignKey:AuthorID;references:UserID"`
 }
 
-func (Message) TableName() string  { return "messages" }
-func (User) TableName() string     { return "users" }
+func (Message) TableName() string { return "messages" }
+func (User) TableName() string    { return "users" }
 
 type Follower struct {
-	WhoID  int `gorm:"column:who_id"`
-	WhomID int `gorm:"column:whom_id"`
+	WhoID  int  `gorm:"column:who_id"`
+	WhomID int  `gorm:"column:whom_id"`
 	Whom   User `gorm:"foreignKey:WhomID"`
 }
 
@@ -64,6 +66,8 @@ func main() {
 
 func create_app() *gin.Engine {
 	router := gin.Default()
+
+	router.Use(PrometheusMiddleware())
 	store := cookie.NewStore([]byte(SECRET_KEY))
 	store.Options(sessions.Options{
 		Path:     "/",
@@ -99,6 +103,8 @@ func create_app() *gin.Engine {
 		api.GET("/fllws/:username", get_follow)
 		api.POST("/fllws/:username", post_follow)
 	}
+
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	router.GET("/register", registerGet)
 	router.POST("/register", registerPost)
@@ -278,6 +284,7 @@ func add_message(c *gin.Context) {
 		msg := Message{AuthorID: user.UserID, Text: text, PubDate: time.Now().Unix(), Flagged: 0}
 		if err := db.Create(&msg).Error; err == nil {
 			session := sessions.Default(c)
+			messagesPostedTotal.Inc() // Prometheus logging.
 			session.AddFlash("Your message was recorded")
 			session.Save()
 		}
@@ -357,6 +364,7 @@ func registerPost(c *gin.Context) {
 		return
 	}
 
+	registrationsTotal.Inc() // Prometheus logging
 	c.Redirect(http.StatusFound, "/login")
 }
 
@@ -385,5 +393,3 @@ func render(c *gin.Context, code int, name string, data gin.H) {
 	}
 	c.HTML(code, name, data)
 }
-
-
