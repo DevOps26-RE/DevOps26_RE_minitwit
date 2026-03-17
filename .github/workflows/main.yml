@@ -15,7 +15,44 @@ permissions:
   issues: write
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      container: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+      - name: gofumpt (auto-fix)
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          gofumpt -l -w ./...
+      - name: hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile-app
+      - name: htmlhint
+        run: npx --yes htmlhint "**/*.html" --format=compact
+      - name: yamllint
+        run: |
+          pip install yamllint --quiet
+          yamllint -c .yamllint.yml .
+      - name: Commit formatting changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-format (gofumpt)"
+
   test:
+    needs: # tests only run if linting passes 
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +65,7 @@ jobs:
         run: docker compose -f docker-compose-tests.yaml down -v
 
   build-and-push:
-    needs: test
+    needs: [lint, test]
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.prepare.outputs.image_tag }}
@@ -97,7 +134,6 @@ jobs:
               repo: context.repo.repo,
               body: '✅ Tests passed and test image built!\n\nTest image: `${{ steps.prepare.outputs.image_tag }}`\n\nYou can deploy this for manual testing if needed.'
             })
-
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
