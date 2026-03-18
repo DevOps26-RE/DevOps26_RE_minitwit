@@ -1,0 +1,27 @@
+# .golangci.yml
+linters:
+  enable:
+    - errcheck        # catch unchecked errors (the ones you just fixed)
+    - gofumpt         # enforce gofumpt formatting
+    - gosec           # security issues
+    - govet           # suspicious constructs (shadowed vars, printf mismatches)
+    - staticcheck     # large set of correctness checks
+    - unused          # unused code
+    - misspell        # common spelling mistakes in comments and strings
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true   # catch x.(Type) without ok check
+    check-blank: true             # catch _ = someFunc()
+  gofumpt:
+    extra-rules: true
+  govet:
+    enable:
+      - shadow                    # catch accidentally shadowed variables
+
+issues:
+  max-issues-per-linter: 0       # show all issues, not just first 50
+  max-same-issues: 0             # show all duplicates too
+
+run:
+  timeout: 5m
