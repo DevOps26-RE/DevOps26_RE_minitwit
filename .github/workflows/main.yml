@@ -27,15 +27,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+
+      - name: gofumpt (auto-fix) # auto-fix and commit back
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          gofumpt -l -w ./...
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-format (gofumpt)"
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           args: --timeout=5m
-      - name: gofumpt (auto-fix)
-        run: |
-          go install mvdan.cc/gofumpt@latest
-          gofumpt -l -w ./...
+
+
+
       - name: hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
