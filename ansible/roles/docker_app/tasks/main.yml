@@ -122,7 +122,6 @@
     password: "{{ DOCKERHUB_TOKEN }}" # docker token for docker hub
   delegate_to: localhost  # runs on local machine
   become: no 
-
 - name: Build DB image
   community.docker.docker_image:
     name: "{{DOCKERHUB_USERNAME}}/minitwit-db:latest"
