@@ -42,6 +42,8 @@ ansible/credentials.yml
 __pychache__/
 *.pyc
 *.pyo
+*.pyd
+node_modules/
 
 *.pyd
 
