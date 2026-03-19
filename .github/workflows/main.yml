@@ -18,8 +18,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     permissions:
-      container: write
-
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,44 +26,47 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-
       - name: gofumpt (auto-fix) # auto-fix and commit back
         run: |
           go install mvdan.cc/gofumpt@latest
           gofumpt -l -w ./...
-      - uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "style: auto-format (gofumpt)"
-
+      - name: Commit formatting changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "style: auto-format (gofumpt)"
+          git push
+      # golang static tool for go
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           args: --timeout=5m
-
-
-
-      - name: hadolint
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: docker/Dockerfile-app
+      # hadolint statis tool for dockerfile     
+      - name: hadolint 
+        run: |
+          wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
+          hadolint --ignore DL3006 docker/Dockerfile-app
+          hadolint --ignore DL3006 docker/Dockerfile-test
+          hadolint --ignore DL3006 prometheus/Dockerfile-prometheus
+      # htmlhint static tool for HTML
       - name: htmlhint
-        run: npx --yes htmlhint "**/*.html" --format=compact
+        run: |
+          npm ci  
+          npx htmlhint "**/*.html" --config .htmlhintrc --format=compact     
+      # yamlint static tool for yaml/yml
       - name: yamllint
         run: |
           pip install yamllint --quiet
           yamllint -c .yamllint.yml .
-      - name: Commit formatting changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "style: auto-format (gofumpt)"
 
   test:
-    needs: # tests only run if linting passes 
+    needs: lint #tests only run if linting passes 
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Run tests
         run: docker compose -f docker-compose-tests.yaml up --build --abort-on-container-exit --exit-code-from test
 
@@ -140,7 +142,8 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ Tests passed and test image built!\n\nTest image: `${{ steps.prepare.outputs.image_tag }}`\n\nYou can deploy this for manual testing if needed.'
+              body: '✅ Tests passed and test image built!\n\nTest image: 
+                `${{ steps.prepare.outputs.image_tag }}`\n\nYou can deploy this for manual testing if needed.'
             })
   deploy:
     needs: build-and-push
