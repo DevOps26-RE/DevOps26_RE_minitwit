@@ -36,16 +36,14 @@ minitwit
 
 # Private files 
 ansible/credentials.yml
-
+node_modules/
 
 # Python
 __pychache__/
 *.pyc
 *.pyo
 *.pyd
-node_modules/
 
-*.pyd
 
 # Jupyter Notebook checkpoints
 .DS_Store
