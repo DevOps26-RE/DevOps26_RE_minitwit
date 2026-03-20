@@ -19,10 +19,9 @@
     done
   changed_when: false
   no_log: true
-  
 - name: Fix interrupted dpkg
   command: dpkg --configure -a
-  ignore_errors: yes
+  ignore_errors: true
   no_log: true
 
 - name: Clean apt cache
@@ -31,7 +30,7 @@
 
 - name: Update apt cache
   apt:
-    update_cache: yes
+    update_cache: true
     lock_timeout: 120
   no_log: true
 
@@ -49,8 +48,8 @@
       - docker.io
       - runc
     state: absent
-    purge: yes
-  ignore_errors: yes
+    purge: true
+  ignore_errors: true
   no_log: true
 
 - name: Install Docker dependencies
@@ -88,7 +87,7 @@
     url: https://github.com/docker/buildx/releases/download/v0.31.1/buildx-v0.31.1.linux-amd64
     dest: /usr/libexec/docker/cli-plugins/docker-buildx
     mode: '0755'
-  #no_log: true
+  no_log: true
 
 ##################################################
 # Configure containerd properly
@@ -118,10 +117,10 @@
 
 - name: Log in to Docker Hub
   community.docker.docker_login:
-    username: "{{ DOCKERHUB_USERNAME }}" # username for dockerhub
-    password: "{{ DOCKERHUB_TOKEN }}" # docker token for docker hub
-  delegate_to: localhost  # runs on local machine
-  become: no 
+    username: "{{ DOCKERHUB_USERNAME }}"  # username for dockerhub
+    password: "{{ DOCKERHUB_TOKEN }}"   # docker token for docker hub
+  delegate_to: localhost   # runs on local machine
+  become: false
 - name: Build DB image
   community.docker.docker_image:
     name: "{{DOCKERHUB_USERNAME}}/minitwit-db:latest"
@@ -129,9 +128,9 @@
       path: "{{ playbook_dir }}/../"
       dockerfile: docker/Dockerfile-db
     source: build
-    push: yes
+    push: true
   delegate_to: localhost  # builds and pushes from local machine
-  become: no
+  become: false
   when: inventory_hostname == "dbserver"
   no_log: true
 
@@ -144,9 +143,9 @@
       args:
         GO_VERSION: "1.25.0"
     source: build
-    push: yes
+    push: true
   delegate_to: localhost  # builds and pushes from local machine
-  become: no
+  become: false
   when: inventory_hostname == "webserver"
   no_log: true
 
@@ -158,16 +157,16 @@
   systemd:
     name: containerd
     state: started
-    enabled: yes
-    daemon_reload: yes
+    enabled: true
+    daemon_reload: true
   no_log: true
 
 - name: Start and enable docker
   systemd:
     name: docker
     state: started
-    enabled: yes
-    daemon_reload: yes
+    enabled: true
+    daemon_reload: true
   no_log: true
 
 ##################################################
@@ -209,7 +208,7 @@
     group: root
     mode: '0755'
   when: inventory_hostname == "dbserver"
-  notify: restart db 
+  notify: restart db
   no_log: true
 
 - name: Copy docker files to DB server
@@ -224,7 +223,7 @@
 
 - name: Copy Schema SQL to DB server
   copy:
-    src: "{{ playbook_dir }}/../db/schema.sql" 
+    src: "{{ playbook_dir }}/../db/schema.sql"
     dest: /opt/minitwit-db/db/schema.sql
     owner: root
     group: root

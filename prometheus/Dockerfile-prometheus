@@ -1,5 +1,5 @@
 # Use the official Prometheus image as the base image
-FROM prom/prometheus:latest
+FROM prom/prometheus:3.10.0
 
 # Copy the custom configuration file into the container
 COPY prometheus.yml /etc/prometheus/prometheus.yml

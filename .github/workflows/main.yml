@@ -1,6 +1,6 @@
 name: CI/CD Pipeline
 
-on:
+"on":
   push:
     # Only trigger on push to main branch
     branches:
@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - name: gofumpt (auto-fix) # auto-fix and commit back
+      - name: gofumpt (auto-fix)  # auto-fix and commit back
         run: |
           go install mvdan.cc/gofumpt@latest
           gofumpt -l -w .
@@ -44,8 +44,8 @@ jobs:
         with:
           version: v2.11.3
           args: --timeout=5m
-      # hadolint statis tool for dockerfile     
-      - name: hadolint 
+      # hadolint statis tool for dockerfile
+      - name: hadolint
         run: |
           wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
           chmod +x /usr/local/bin/hadolint
@@ -55,8 +55,8 @@ jobs:
       # htmlhint static tool for HTML
       - name: htmlhint
         run: |
-          npm ci  
-          npx htmlhint "**/*.html" --config .htmlhintrc --format=compact     
+          npm ci
+          npx htmlhint "**/*.html" --config .htmlhintrc --format=compact
       # yamlint static tool for yaml/yml
       - name: yamllint
         run: |
@@ -64,7 +64,7 @@ jobs:
           yamllint -c .yamllint .
 
   test:
-    needs: pre-testing #tests only run if linting passes 
+    needs: pre-testing  # tests only run if linting passes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +93,6 @@ jobs:
         run: |
           # Sanitize branch name replacing slashes with dashes
           BRANCH_NAME=$(echo '${{ github.head_ref || github.ref_name }}' | tr '/' '-')
-          
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             # Define tags for BOTH the main app and Prometheus
             echo "app_tags=${DOCKER_USER}/minitwit:latest" >> $GITHUB_OUTPUT
@@ -143,7 +142,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ Tests passed and test image built!\n\nTest image: 
+              body: '✅ Tests passed and test image built!\n\nTest image:
                 `${{ steps.prepare.outputs.image_tag }}`\n\nYou can deploy this for manual testing if needed.'
             })
   deploy:
@@ -177,15 +176,13 @@ jobs:
           envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,PROM_URL,GRAFANA_URL
           script: |
             cd /opt/minitwit
-            
             echo "DOCKER_IMAGE=${DOCKER_IMAGE}" > .env
             # Write the PROM_IMAGE variable into the .env file on the server
             echo "PROM_IMAGE=${PROM_IMAGE}" >> .env
             echo "DB_ADDR=${DB_ADDR}" >> .env
             echo "PROM_URL=${PROM_URL}" >> .env
             echo "GRAFANA_URL=${GRAFANA_URL}" >> .env
-            
+        
             docker compose -f docker-compose-app.yaml pull
             docker compose -f docker-compose-app.yaml up -d
-            
             docker image prune -f

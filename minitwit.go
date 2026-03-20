@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -61,11 +62,9 @@ func main() {
 	}
 
 	router := create_app()
-	router.Run(":5001") // This line should be deleted
-
-	//		if err := router.Run(":5001"); err != nil {
-	//	    	log.Fatalf("failed to start server: %v", err)
-	//	}
+	if err := router.Run(":5001"); err != nil {
+		log.Fatalf("failed to start server: %v", err)
+	}
 }
 
 func create_app() *gin.Engine {
@@ -248,9 +247,10 @@ func follow_user(c *gin.Context) {
 
 	whomID, err := get_user_id(username)
 	if err != nil || whomID == 0 {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		// if abortErr := c.AbortWithError(http.StatusInternalServerError, abortErr); abortErr != nil {
-		// 	log.Printf("error aborting request: %v", abortErr)}
+		//c.AbortWithError(http.StatusInternalServerError, err)
+		if abortErr := c.AbortWithError(http.StatusInternalServerError, err); abortErr != nil {
+			log.Printf("error aborting request: %v", abortErr)
+		}
 		return
 	}
 
@@ -269,9 +269,9 @@ func unfollow_user(c *gin.Context) {
 
 	whomID, err := get_user_id(username)
 	if err != nil || whomID == 0 {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		// if abortErr := c.AbortWithError(http.StatusInternalServerError, abortErr); abortErr != nil {
-		// 	log.Printf("error aborting request: %v", abortErr)}
+		if abortErr := c.AbortWithError(http.StatusInternalServerError, err); abortErr != nil {
+			log.Printf("error aborting request: %v", abortErr)
+		}
 		return
 	}
 
@@ -297,12 +297,11 @@ func add_message(c *gin.Context) {
 			// }
 			session := sessions.Default(c)
 			session.AddFlash("Your message was recorded")
-
-			session.Save() // Replace with commented one
-			// if err := session.Save(); err != nil {
-			// 	c.AbortWithStatus(http.StatusInternalServerError)
-			// 	log.Printf("failed to save session: %v", err)
-			// 	return}
+			if err := session.Save(); err != nil {
+				c.AbortWithStatus(http.StatusInternalServerError)
+				log.Printf("failed to save session: %v", err)
+				return
+			}
 		}
 	}
 
@@ -334,12 +333,11 @@ func loginPost(c *gin.Context) {
 	session := sessions.Default(c)
 	session.AddFlash("You were logged in")
 	session.Set("user_id", user.UserID)
-	session.Save() // remove
-	// if err := session.Save(); err != nil {
-	// 	c.AbortWithStatus(http.StatusInternalServerError)
-	// 	log.Printf("failed to save session: %v", err)
-	// return
-	// }
+	if err := session.Save(); err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Printf("failed to save session: %v", err)
+		return
+	}
 	c.Redirect(http.StatusFound, "/")
 }
 
@@ -391,12 +389,11 @@ func registerPost(c *gin.Context) {
 func logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Delete("user_id")
-	session.Save() // Remove
-	// if err := session.Save(); err != nil {
-	// 	c.AbortWithStatus(http.StatusInternalServerError)
-	// 	log.Printf("failed to save session: %v", err)
-	// return
-	// }
+	if err := session.Save(); err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Printf("failed to save session: %v", err)
+		return
+	}
 	c.Redirect(http.StatusFound, "/public")
 }
 
