@@ -291,10 +291,6 @@ func add_message(c *gin.Context) {
 	if text != "" {
 		msg := Message{AuthorID: user.UserID, Text: text, PubDate: time.Now().Unix(), Flagged: 0}
 		if err := db.Create(&msg).Error; err == nil {
-			// 	c.AbortWithStatus(http.StatusInternalServerError)
-			//     log.Printf("failed to create message: %v", err)
-			//     return
-			// }
 			session := sessions.Default(c)
 			session.AddFlash("Your message was recorded")
 			if err := session.Save(); err != nil {

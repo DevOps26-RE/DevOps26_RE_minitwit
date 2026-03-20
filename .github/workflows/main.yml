@@ -15,7 +15,7 @@ permissions:
   issues: write
 
 jobs:
-  pre-testing:
+  static-analysis:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,18 +26,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - name: gofumpt (auto-fix)  # auto-fix and commit back
+      - name: gofumpt
         run: |
           go install mvdan.cc/gofumpt@latest
           gofumpt -l -w .
-      # - name: Commit formatting changes
-      #   run: |
-      #     git config user.name "github-actions[bot]"
-      #     git config user.email "github-actions[bot]@users.noreply.github.com"
-      #     git add -A
-      #     git diff --staged --quiet && echo "No changes" && exit 0
-      #     git commit -m "style: auto-format (gofumpt)"
-      #     git push
+      # TODO: Add auto-fix here
       # golang static tool for go
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
@@ -64,7 +57,7 @@ jobs:
           yamllint -c .yamllint .
 
   test:
-    needs: pre-testing  # tests only run if linting passes
+    needs: static-analysis  # tests only run if linting passes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +69,7 @@ jobs:
         run: docker compose -f docker-compose-tests.yaml down -v
 
   build-and-push:
-    needs: [pre-testing, test]
+    needs: [static-analysis, test]
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.prepare.outputs.image_tag }}
