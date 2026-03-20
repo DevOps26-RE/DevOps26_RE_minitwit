@@ -29,15 +29,24 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile-test
+    environment:
+      BASE_URL: http://web:5001
+      API_BASE_URL: http://web:5001/api
+      GUI_URL: http://web:5001/register
+      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: minitwit
+      PGUSER: minitwit
+      PGPASSWORD: minitwit
     depends_on:
       - web
-    entrypoint: ["python", "test/minitwit_simulator.py", "http://web:5001/api"]
+      - selenium
+    entrypoint: ["sh", "test/run_all_tests.sh"]
 
-  prometheus:
-      image: prom/prometheus:latest
-      volumes:
-        - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      ports:
-        - "127.0.0.1:9090:9090"
-      depends_on:
-        - web
+  selenium:
+    image: selenium/standalone-chromium:latest
+    shm_size: 2gb
+    environment:
+      SE_NODE_MAX_SESSIONS: 1
+      SE_NODE_OVERRIDE_MAX_SESSIONS: true

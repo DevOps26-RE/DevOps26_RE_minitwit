@@ -66,13 +66,14 @@ The project uses a **decoupled Docker setup** with three separate Dockerfiles an
 
 For local development, run the complete stack:
 ```bash
-docker-compose -f docker-compose-tests.yaml up --build
+docker compose -f docker-compose-tests.yaml up --build --abort-on-container-exit --exit-code-from test
 ```
 
 This starts:
 - PostgreSQL database container
 - Go application container
-- Python test simulator container
+- Selenium Chromium container
+- Python test runner container (integration + API simulator + UI/E2E)
 
 ---
 
@@ -102,6 +103,20 @@ vagrant up --provider=digital_ocean
 ---
 
 ## 🧪 Testing & Troubleshooting
+
+### Full CI Quality Gate (Local Reproduction)
+The CI pipeline runs all suites as one quality gate. If any suite fails, build and deployment are blocked.
+
+Included suites:
+- Integration tests: auth flow, timeline visibility, follow/unfollow
+- API simulator test: compatibility scenario from `test/minitwit_scenario.csv`
+- UI/E2E tests: Selenium-based browser flow (including DB-side verification)
+
+Run locally exactly like CI:
+```bash
+docker compose -f docker-compose-tests.yaml up --build --abort-on-container-exit --exit-code-from test
+docker compose -f docker-compose-tests.yaml down -v
+```
 
 ### Run Simulator API Tests
 Test your API compatibility using the provided Python simulator:
@@ -136,7 +151,7 @@ We use **GORM** as our Object-Relational Mapper (ORM) to abstract database inter
 
 ### CI/CD: GitHub Actions
 Our project utilizes **GitHub Actions** for an automated pipeline:
-- **Testing**: On every push, we run our test suite using Docker Compose to ensure code quality.
+- **Testing**: On every push/PR to `main`, we run integration + API simulator + UI/E2E tests via Docker Compose as a mandatory quality gate.
 - **Continuous Deployment**: Successful pushes to the `main` branch trigger a Docker build, which is pushed to Docker Hub and automatically deployed to our DigitalOcean Droplet via SSH.
 - **Releases**: Pushing a version tag (e.g., `v1.0.0`) automatically generates a GitHub Release with automated changelogs.
 ---

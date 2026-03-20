@@ -21,7 +21,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run tests
-        run: docker compose -f docker-compose-tests.yaml up --abort-on-container-exit --exit-code-from test
+        run: docker compose -f docker-compose-tests.yaml up --build --abort-on-container-exit --exit-code-from test
+
+      - name: Tear down test stack
+        if: always()
+        run: docker compose -f docker-compose-tests.yaml down -v
 
   build-and-push:
     needs: test
