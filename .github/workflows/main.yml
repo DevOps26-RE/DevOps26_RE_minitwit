@@ -64,7 +64,7 @@ jobs:
           yamllint -c .yamllint .
 
   test:
-    needs: lint #tests only run if linting passes 
+    needs: pre-testing #tests only run if linting passes 
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +76,7 @@ jobs:
         run: docker compose -f docker-compose-tests.yaml down -v
 
   build-and-push:
-    needs: [lint, test]
+    needs: [pre-testing, test]
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.prepare.outputs.image_tag }}
