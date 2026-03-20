@@ -28,6 +28,8 @@ jobs:
           go-version: stable
       - name: gofumpt (auto-fix) # auto-fix and commit back
         run: |
+          ls -la
+          pwd
           go install mvdan.cc/gofumpt@latest
           gofumpt -l -w ./...
       - name: Commit formatting changes
