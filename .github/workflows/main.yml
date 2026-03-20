@@ -116,11 +116,13 @@ jobs:
           DB_ADDR: ${{ github.ref == 'refs/heads/main' && secrets.DO_DB || secrets.DO_DB_STAGE }}
           DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit:${{ needs.build-and-push.outputs.image_tag }}
           PROM_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit-prometheus:${{ needs.build-and-push.outputs.image_tag }}
+          PROM_URL: ${{ format('http://{0}.com:5001/prometheus', github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE) }}
+          GRAFANA_URL: ${{ format('http://{0}.com:5001/grafana/', github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE) }}
         with:
           host: ${{ github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE }}
           username: ${{ secrets.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE
+          envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,PROM_URL,GRAFANA_URL
           script: |
             cd /opt/minitwit
             
@@ -128,6 +130,8 @@ jobs:
             # Write the PROM_IMAGE variable into the .env file on the server
             echo "PROM_IMAGE=${PROM_IMAGE}" >> .env
             echo "DB_ADDR=${DB_ADDR}" >> .env
+            echo "PROM_URL=${PROM_URL}" >> .env
+            echo "GRAFANA_URL=${GRAFANA_URL}" >> .env
             
             docker compose -f docker-compose-app.yaml pull
             docker compose -f docker-compose-app.yaml up -d
