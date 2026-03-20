@@ -25,8 +25,8 @@ var (
 	httpRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "minitwit_http_request_duration_seconds",
-			Help:    "HTTP request duration in seconds",
-			Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100, 250, 500, 1000}, // Milliseconds
+			Help:    "HTTP request duration in milliseconds",
+			Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100, 250, 500, 1000}, // milliseconds
 		},
 		[]string{"method", "path"},
 	)
@@ -62,6 +62,7 @@ func PrometheusMiddleware() gin.HandlerFunc {
 			path = "unmatched"
 		}
 
+		// TODO: Implement big data hoarding with a swtitch case on the path for every route. Then PROFIT.
 		httpRequestsTotal.WithLabelValues(c.Request.Method, path, status).Inc()
 		httpRequestDuration.WithLabelValues(c.Request.Method, path).Observe(duration)
 	}
