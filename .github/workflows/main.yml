@@ -175,7 +175,6 @@ jobs:
             echo "DB_ADDR=${DB_ADDR}" >> .env
             echo "PROM_URL=${PROM_URL}" >> .env
             echo "GRAFANA_URL=${GRAFANA_URL}" >> .env
-        
             docker compose -f docker-compose-app.yaml pull
             docker compose -f docker-compose-app.yaml up -d
             docker image prune -f
