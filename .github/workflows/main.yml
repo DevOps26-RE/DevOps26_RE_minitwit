@@ -60,7 +60,7 @@ jobs:
       - name: yamllint
         run: |
           pip install yamllint --quiet
-          yamllint -c .yamllint.yml .
+          yamllint -c .yamllint .
 
   test:
     needs: lint #tests only run if linting passes 
