@@ -1,4 +1,5 @@
 # .golangci.yml
+version: "2"
 linters:
   enable:
     - errcheck        # catch unchecked errors (the ones you just fixed)
