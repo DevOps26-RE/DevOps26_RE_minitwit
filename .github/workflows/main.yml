@@ -131,13 +131,18 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const body = `✅ Tests passed and test image built!
+
+            Test image: \`test-feature-analysis_tools\`
+
+            You can deploy this for manual testing if needed.`;
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ Tests passed and test image built!\n\nTest image:
-                `${{ steps.prepare.outputs.image_tag }}`\n\nYou can deploy this for manual testing if needed.'
-            })
+              body: body
+            });
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
