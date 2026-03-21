@@ -1,6 +1,6 @@
 name: CI/CD Pipeline
 
-on:
+"on":
   push:
     # Only trigger on push to main branch
     branches:
@@ -15,11 +15,52 @@ permissions:
   issues: write
 
 jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: gofumpt
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          gofumpt -l -w .
+      # TODO: Add auto-fix here
+      # golang static tool for go
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.3
+          args: --timeout=5m
+      # hadolint statis tool for dockerfile
+      - name: hadolint
+        run: |
+          wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
+          hadolint --ignore DL3006 docker/Dockerfile-app
+          hadolint --ignore DL3006 docker/Dockerfile-test
+          hadolint --ignore DL3006 prometheus/Dockerfile-prometheus
+      # htmlhint static tool for HTML
+      - name: htmlhint
+        run: |
+          npm ci
+          npx htmlhint "**/*.html" --config .htmlhintrc --format=compact
+      # yamlint static tool for yaml/yml
+      - name: yamllint
+        run: |
+          pip install yamllint --quiet
+          yamllint -c .yamllint .
+
   test:
+    needs: static-analysis  # tests only run if linting passes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Run tests
         run: docker compose -f docker-compose-tests.yaml up --build --abort-on-container-exit --exit-code-from test
 
@@ -28,7 +69,7 @@ jobs:
         run: docker compose -f docker-compose-tests.yaml down -v
 
   build-and-push:
-    needs: test
+    needs: [static-analysis, test]
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.prepare.outputs.image_tag }}
@@ -45,7 +86,6 @@ jobs:
         run: |
           # Sanitize branch name replacing slashes with dashes
           BRANCH_NAME=$(echo '${{ github.head_ref || github.ref_name }}' | tr '/' '-')
-          
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             # Define tags for BOTH the main app and Prometheus
             echo "app_tags=${DOCKER_USER}/minitwit:latest" >> $GITHUB_OUTPUT
@@ -91,13 +131,18 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const body = `✅ Tests passed and test image built!
+
+            Test image: \`test-feature-analysis_tools\`
+
+            You can deploy this for manual testing if needed.`;
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ Tests passed and test image built!\n\nTest image: `${{ steps.prepare.outputs.image_tag }}`\n\nYou can deploy this for manual testing if needed.'
-            })
-
+              body: body
+            });
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -129,15 +174,12 @@ jobs:
           envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,PROM_URL,GRAFANA_URL
           script: |
             cd /opt/minitwit
-            
             echo "DOCKER_IMAGE=${DOCKER_IMAGE}" > .env
             # Write the PROM_IMAGE variable into the .env file on the server
             echo "PROM_IMAGE=${PROM_IMAGE}" >> .env
             echo "DB_ADDR=${DB_ADDR}" >> .env
             echo "PROM_URL=${PROM_URL}" >> .env
             echo "GRAFANA_URL=${GRAFANA_URL}" >> .env
-            
             docker compose -f docker-compose-app.yaml pull
             docker compose -f docker-compose-app.yaml up -d
-            
             docker image prune -f

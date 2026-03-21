@@ -38,7 +38,7 @@
 <ul class="messages">
   {{ range .messages }}
   <li>
-    <img src="{{ gravatar_url .Author.Email 48 }}">
+    <img src="{{ gravatar_url .Author.Email 48 }}" alt="{{.Author.Username}}">
     <p>
       <strong><a href="/{{ .Author.Username }}">{{ .Author.Username }}</a></strong>
       {{ .Text }}
