@@ -68,8 +68,15 @@ func main() {
 }
 
 func create_app() *gin.Engine {
-	router := gin.Default()
+	// gin.New() instead of gin.Default() so that Gin's built-in unstructured
+	// text logger is not registered. LoggingMiddleware below replaces it with
+	// structured JSON. gin.Recovery() keeps the panic → 500 behaviour.
+	router := gin.New()
+	router.Use(gin.Recovery())
 
+	// LoggingMiddleware is registered first (outermost) so its post-handler
+	// code runs last and sees the fully settled response status code.
+	router.Use(LoggingMiddleware())
 	router.Use(PrometheusMiddleware())
 	store := cookie.NewStore([]byte(SECRET_KEY))
 	store.Options(sessions.Options{
