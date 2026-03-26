@@ -50,3 +50,8 @@ limits_config:
   # accidentally re-shipping old logs after a restart.
   reject_old_samples: true
   reject_old_samples_max_age: 168h
+  # Disable structured metadata to avoid a Loki 3.x bug where the byte
+  # size calculation goes negative, causing "negative structured metadata
+  # bytes received" errors. Promtail does not send structured metadata so
+  # disabling this has no effect on log content.
+  allow_structured_metadata: false
