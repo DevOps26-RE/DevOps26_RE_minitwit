@@ -172,6 +172,30 @@ Our project utilizes **GitHub Actions** for an automated pipeline:
 └── Vagrantfile      # Infrastructure as Code (IaC) configuration
 └── develop.sh    # for local developemnt
 ```
+## Static tools: 
+### GO
+- golangci-lint is a fast parallel-running linters static tool for Go, desgined seamlessly        into a continuous integration (CI) pipelines. Rather than being a single linter, it bundles     over 100 different static analysis  toosl to check for errors, code style, security issues,
+  and performance optimizations. It is highly configurable through a `golangci.yml` file,
+  allowing you to specify which linters and checks are included during execution.
+- gofumpt is a strict more opinionated fork of the standard `gofmt` Go code formatter. It is      desgined to enforce a higher level of consistency in Go codebases, providing more than 20       additional rules on top of  `gofmt` while remaining 100% backward compatible.
+### Dockefile
+- Hadolint is a specialized Dockerfile linter, analyzing and enforcing best practices. It
+  serves as a static analysis tool that helps developers create secure, efficient, and
+  maintainable container images by flagging error, inefficient instructions, and security risks
+  before build occur. Hadolint also uses configuration file called `.hadolint.yaml` which is
+  fully configurable. As modern developent leans havily on automating the tasks integrating
+  Hadolint into Continuous Integration and Continuous Delivery (CI/CD).
+### HTML
+- HTMLhint is a tool (a linter) that analyzes your HTML code and warns about potential
+  problems. It focuses on code quality, correctness and best practices. Like most tools of
+  this kind, it can be customized to suit your needs. For this purpose, a configuration file
+  called `.htmlhintrc` (or `.htmlhintrc.yaml`) is used.  
+### yaml/yml
+- yamllint is a tool that analyzes YAML (.yml/.yaml) files. It checks for syntax validity as
+  well as common issues such as duplicate keys and formatting problems like line length,
+  trailing spaces, and incorrect indentation. It uses a set of independent rules to detect
+  problems, where each rule can be enabled, disabled, or customized. All of these settings can
+  be configured through a .yamllint file.
 
 ## GitHub Actions Secrets Configuration
 
