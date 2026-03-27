@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-go@f111f32e013810017d9935ed0019967730103218 # v5.3.0
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
         with:
           go-version: stable
       - name: gofumpt
@@ -33,7 +33,7 @@ jobs:
       # TODO: Add auto-fix here
       # golang static tool for go
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@971e25114d45c8444e009d12202827e307673c5d # v6.1.1
+        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # v6.1.1
         with:
           version: v2.11.3
           args: --timeout=5m
@@ -77,7 +77,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebca41751010c7f833957b483c8 # v3.10.0
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Prepare environment variables and Docker tags
         id: prepare
