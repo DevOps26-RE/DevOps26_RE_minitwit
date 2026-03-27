@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -262,7 +263,8 @@ func follow_user(c *gin.Context) {
 	}
 
 	db.Create(&Follower{WhoID: currUser.UserID, WhomID: whomID})
-	c.Redirect(http.StatusFound, "/"+username)
+	redirectURL := url.URL{Path: "/" + username}
+	c.Redirect(http.StatusFound, redirectURL.String())
 }
 
 func unfollow_user(c *gin.Context) {
@@ -283,7 +285,8 @@ func unfollow_user(c *gin.Context) {
 	}
 
 	db.Where("who_id = ? AND whom_id = ?", currUser.UserID, whomID).Delete(&Follower{})
-	c.Redirect(http.StatusFound, "/"+username)
+	redirectURL := url.URL{Path: "/" + username}
+	c.Redirect(http.StatusFound, redirectURL.String())
 }
 
 func add_message(c *gin.Context) {
