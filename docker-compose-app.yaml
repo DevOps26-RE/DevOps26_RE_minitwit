@@ -60,7 +60,7 @@ services:
   # no container names are hardcoded, so new services are picked up
   # automatically without any config changes.
   promtail:
-    image: grafana/promtail:3.5.0
+    image: grafana/promtail:3.6.0
     command: -config.file=/etc/promtail/promtail-config.yaml
     volumes:
       - ./promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
