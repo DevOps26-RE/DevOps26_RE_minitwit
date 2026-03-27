@@ -177,7 +177,7 @@ func format_datetime(timestamp int64) string {
 func gravatar_url(email string, size int) string {
 	address := strings.ToLower(strings.TrimSpace(email))
 	hash := sha256.Sum256([]byte(address))
-	return fmt.Sprintf("https://www.gravatar.com/avatar/sha256/%x?d=identicon&s=%d", hash, size)
+	return fmt.Sprintf("https://www.gravatar.com/avatar/%x?d=identicon&s=%d", hash, size)
 }
 
 func before_request(c *gin.Context) {
