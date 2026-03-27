@@ -6,6 +6,7 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:5001"
+      - "--accesslog=true"
     ports:
       - "5001:5001"
     volumes:
