@@ -1,5 +1,5 @@
 # Build Environment (Builder)
-FROM cgr.dev/chainguard/go:latest AS builder
+FROM cgr.dev/chainguard/go AS builder
 
 WORKDIR /app
 
