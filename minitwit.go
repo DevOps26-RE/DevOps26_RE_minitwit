@@ -22,8 +22,16 @@ import (
 )
 
 const (
-	PER_PAGE   int    = 30
-	SECRET_KEY string = "development key"
+	PER_PAGE         int    = 30
+	SECRET_KEY       string = "development key"
+	RouteRegister    string = "/register"
+	RoutePublic      string = "/public"
+	RouteLogin       string = "/login"
+	QueryUsername    string = "username = ?"
+	OrderPubDateDesc string = "pub_date DESC"
+	TplTimeline      string = "timeline.html"
+	TplRegister      string = "register.html"
+	ErrSaveSession   string = "failed to save session: %v"
 )
 
 var db *gorm.DB
@@ -107,7 +115,7 @@ func create_app() *gin.Engine {
 	api.Use(simAuth)
 	{
 		api.GET("/latest", get_latest_value)
-		api.POST("/register", post_register)
+		api.POST(RouteRegister, post_register)
 		api.GET("/msgs", get_messages)
 		api.GET("/msgs/:username", get_messages_per_user)
 		api.POST("/msgs/:username", post_messages_per_user)
@@ -117,19 +125,19 @@ func create_app() *gin.Engine {
 
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	router.GET("/register", registerGet)
-	router.POST("/register", registerPost)
+	router.GET(RouteRegister, registerGet)
+	router.POST(RouteRegister, registerPost)
 
 	router.GET("/", timeline)
-	router.GET("/public", public_timeline)
+	router.GET(RoutePublic, public_timeline)
 	router.GET("/logout", logout)
 	router.GET("/:username", user_timeline)
 	router.GET("/:username/follow", follow_user)
 	router.GET("/:username/unfollow", unfollow_user)
 
 	router.POST("/add_message", add_message)
-	router.GET("/login", loginGet)
-	router.POST("/login", loginPost)
+	router.GET(RouteLogin, loginGet)
+	router.POST(RouteLogin, loginPost)
 
 	return router
 }
@@ -152,7 +160,7 @@ func init_db() error {
 
 func get_user_id(username string) (int, error) {
 	var user User
-	result := db.Where("username = ?", username).First(&user)
+	result := db.Where(QueryUsername, username).First(&user)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
 			return 0, nil
@@ -190,16 +198,16 @@ func before_request(c *gin.Context) {
 func timeline(c *gin.Context) {
 	val, exists := c.Get("user")
 	if !exists {
-		c.Redirect(http.StatusFound, "/public")
+		c.Redirect(http.StatusFound, RoutePublic)
 		return
 	}
 	user := val.(User)
 
 	var messages []Message
 	db.Preload("Author").Where("flagged = 0 AND (author_id = ? OR author_id IN (SELECT whom_id FROM follower WHERE who_id = ?))", user.UserID, user.UserID).
-		Order("pub_date DESC").Limit(PER_PAGE).Find(&messages)
+		Order(OrderPubDateDesc).Limit(PER_PAGE).Find(&messages)
 
-	render(c, http.StatusOK, "timeline.html", gin.H{
+	render(c, http.StatusOK, TplTimeline, gin.H{
 		"messages": messages,
 		"endpoint": "timeline",
 	})
@@ -208,9 +216,9 @@ func timeline(c *gin.Context) {
 func public_timeline(c *gin.Context) {
 	var messages []Message
 	db.Preload("Author").Where("flagged = 0").
-		Order("pub_date DESC").Limit(PER_PAGE).Find(&messages)
+		Order(OrderPubDateDesc).Limit(PER_PAGE).Find(&messages)
 
-	render(c, http.StatusOK, "timeline.html", gin.H{
+	render(c, http.StatusOK, TplTimeline, gin.H{
 		"messages": messages,
 		"endpoint": "public_timeline",
 	})
@@ -219,7 +227,7 @@ func public_timeline(c *gin.Context) {
 func user_timeline(c *gin.Context) {
 	username := c.Param("username")
 	var profileUser User
-	if err := db.Where("username = ?", username).First(&profileUser).Error; err != nil {
+	if err := db.Where(QueryUsername, username).First(&profileUser).Error; err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -234,9 +242,9 @@ func user_timeline(c *gin.Context) {
 
 	var messages []Message
 	db.Preload("Author").Where("author_id = ?", profileUser.UserID).
-		Order("pub_date DESC").Limit(PER_PAGE).Find(&messages)
+		Order(OrderPubDateDesc).Limit(PER_PAGE).Find(&messages)
 
-	render(c, http.StatusOK, "timeline.html", gin.H{
+	render(c, http.StatusOK, TplTimeline, gin.H{
 		"messages":     messages,
 		"profile_user": profileUser,
 		"followed":     followed,
@@ -255,7 +263,6 @@ func follow_user(c *gin.Context) {
 
 	whomID, err := get_user_id(username)
 	if err != nil || whomID == 0 {
-		//c.AbortWithError(http.StatusInternalServerError, err)
 		if abortErr := c.AbortWithError(http.StatusInternalServerError, err); abortErr != nil {
 			log.Printf("error aborting request: %v", abortErr)
 		}
@@ -305,7 +312,7 @@ func add_message(c *gin.Context) {
 			session.AddFlash("Your message was recorded")
 			if err := session.Save(); err != nil {
 				c.AbortWithStatus(http.StatusInternalServerError)
-				log.Printf("failed to save session: %v", err)
+				log.Printf(ErrSaveSession, err)
 				return
 			}
 		}
@@ -329,7 +336,7 @@ func loginPost(c *gin.Context) {
 	password := c.PostForm("password")
 
 	var user User
-	err := db.Where("username = ?", username).First(&user).Error
+	err := db.Where(QueryUsername, username).First(&user).Error
 
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PWHash), []byte(password)) != nil {
 		render(c, http.StatusOK, "login.html", gin.H{"error": "Invalid username or password"})
@@ -341,7 +348,7 @@ func loginPost(c *gin.Context) {
 	session.Set("user_id", user.UserID)
 	if err := session.Save(); err != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
-		log.Printf("failed to save session: %v", err)
+		log.Printf(ErrSaveSession, err)
 		return
 	}
 	c.Redirect(http.StatusFound, "/")
@@ -352,7 +359,7 @@ func registerGet(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/")
 		return
 	}
-	render(c, http.StatusOK, "register.html", nil)
+	render(c, http.StatusOK, TplRegister, nil)
 }
 
 func registerPost(c *gin.Context) {
@@ -372,24 +379,24 @@ func registerPost(c *gin.Context) {
 		errorStr = "The two passwords do not match"
 	} else {
 		var existing User
-		if err := db.Where("username = ?", username).First(&existing).Error; err == nil {
+		if err := db.Where(QueryUsername, username).First(&existing).Error; err == nil {
 			errorStr = "The username is already taken"
 		}
 	}
 
 	if errorStr != "" {
-		render(c, http.StatusOK, "register.html", gin.H{"error": errorStr})
+		render(c, http.StatusOK, TplRegister, gin.H{"error": errorStr})
 		return
 	}
 
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	newUser := User{Username: username, Email: email, PWHash: string(hashedPassword)}
 	if err := db.Create(&newUser).Error; err != nil {
-		render(c, http.StatusOK, "register.html", gin.H{"error 404": err})
+		render(c, http.StatusOK, TplRegister, gin.H{"error 404": err})
 		return
 	}
 
-	c.Redirect(http.StatusFound, "/login")
+	c.Redirect(http.StatusFound, RouteLogin)
 }
 
 func logout(c *gin.Context) {
@@ -397,10 +404,10 @@ func logout(c *gin.Context) {
 	session.Delete("user_id")
 	if err := session.Save(); err != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
-		log.Printf("failed to save session: %v", err)
+		log.Printf(ErrSaveSession, err)
 		return
 	}
-	c.Redirect(http.StatusFound, "/public")
+	c.Redirect(http.StatusFound, RoutePublic)
 }
 
 func render(c *gin.Context, code int, name string, data gin.H) {
