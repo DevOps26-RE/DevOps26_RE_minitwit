@@ -49,7 +49,7 @@ services:
   # It is intentionally not exposed externally — Promtail pushes to it
   # and Grafana queries it via the internal Docker network only.
   loki:
-    image: grafana/loki:3.5.0
+    image: grafana/loki:3.7.0
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
       - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
