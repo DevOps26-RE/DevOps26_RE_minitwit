@@ -1,0 +1,55 @@
+---
+# Promtail configuration for MiniTwit
+#
+# Promtail is the log shipping agent. It reads logs produced by Docker
+# containers and forwards them to Loki for storage and querying.
+#
+# HOW IT WORKS:
+#   1. Promtail connects to the Docker daemon via the Unix socket
+#      (/var/run/docker.sock) to discover running containers automatically.
+#   2. For each container it finds, it tails the container's stdout/stderr.
+#   3. Each log line is forwarded to Loki with labels attached so you can
+#      filter by service, stream (stdout vs stderr), or container name.
+#
+# NO CONTAINER NAMES ARE HARDCODED. Promtail discovers all running
+# containers dynamically, so adding new services to docker-compose requires
+# zero changes here.
+#
+# LABELS attached to every log line:
+#   - service:   Docker Compose service name (e.g. "web", "prometheus")
+#                Query in Grafana: {service="web"}
+#   - container: Docker container name (e.g. "minitwit-web-1")
+#   - stream:    "stdout" or "stderr"
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+# Promtail tracks which log lines it has already shipped so that it does
+# not re-send everything on restart. Position state is stored here.
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: status
+            values: ["running"]
+    relabel_configs:
+      # Strip the leading "/" from Docker container names (/minitwit-web-1 → minitwit-web-1)
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.*)
+        target_label: container
+      # Label stdout vs stderr so you can filter noise (e.g. exclude stderr)
+      - source_labels: [__meta_docker_container_log_stream]
+        target_label: stream
+      # Docker Compose automatically adds a "com.docker.compose.service" label
+      # to every container it starts. We surface this as "service" in Loki.
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service

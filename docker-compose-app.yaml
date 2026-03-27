@@ -44,6 +44,29 @@ services:
     depends_on:
       - web
 
+  # Loki stores and indexes logs received from Promtail.
+  # It is intentionally not exposed externally — Promtail pushes to it
+  # and Grafana queries it via the internal Docker network only.
+  loki:
+    image: grafana/loki:3.5.0
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+
+  # Promtail ships logs from all containers to Loki.
+  # It reads the Docker socket to auto-discover running containers —
+  # no container names are hardcoded, so new services are picked up
+  # automatically without any config changes.
+  promtail:
+    image: grafana/promtail:3.5.0
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
   grafana:
     image: grafana/grafana:latest
     environment:
@@ -51,8 +74,12 @@ services:
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - grafana_data:/var/lib/grafana
+      # Provisions Prometheus and Loki datasources automatically on startup.
+      # No manual datasource setup needed after deployment.
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
     depends_on:
       - prometheus
+      - loki
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mygrafana.entrypoints=web"
@@ -62,3 +89,4 @@ services:
 volumes:
   prometheus_data:
   grafana_data:
+  loki_data:

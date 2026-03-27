@@ -1,0 +1,41 @@
+---
+# Grafana datasource provisioning for MiniTwit
+#
+# Grafana reads every YAML file in /etc/grafana/provisioning/datasources/
+# on startup and registers the datasources automatically.
+#
+# This means teammates never need to manually add datasources through the
+# Grafana UI — they are always present after a fresh deployment.
+#
+# editable: false  →  datasources appear with a lock icon in the UI.
+#                     They can be used for queries and dashboards but not
+#                     deleted or modified manually. This ensures the config
+#                     in this file is always the source of truth.
+#
+# PROMETHEUS  →  performance metrics (request counts, latencies, error rates)
+#                Use PromQL to query. Default datasource so existing dashboards
+#                work without changes.
+#
+# LOKI        →  application logs (structured JSON from the Go app + all other
+#                container logs collected by Promtail)
+#                Use LogQL to query. Example queries:
+#                  {service="web"}                        — all web logs
+#                  {service="web"} | json | status >= 500 — server errors only
+#                  {service="web"} | json | latency_ms > 1000 — slow requests
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: false

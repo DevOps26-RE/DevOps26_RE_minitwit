@@ -47,3 +47,6 @@ __pychache__/
 
 # Jupyter Notebook checkpoints
 .DS_Store
+.claude
+_claude-resume.sh
+CLAUDE.md

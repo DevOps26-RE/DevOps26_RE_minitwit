@@ -1,0 +1,57 @@
+---
+# Loki configuration for MiniTwit
+#
+# Loki is a log aggregation system. It stores logs and makes them queryable
+# via LogQL (a query language similar to PromQL used by Prometheus).
+#
+# This is a single-node setup using local filesystem storage, which is
+# appropriate for a single-server deployment. Logs are persisted in a
+# Docker volume so they survive container restarts.
+#
+# Loki is intentionally NOT exposed externally (no Traefik routing, no ports).
+# Only Promtail (log shipper) and Grafana (dashboard) talk to it, both via
+# the internal Docker Compose network using the service name "loki".
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+# "common" sets defaults shared across components so we don't repeat
+# the storage path and replication settings everywhere.
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+# Schema v13 with TSDB is the current standard for Loki 3.x.
+# Do not change the "from" date — it marks when this schema started being
+# used. If you need to change the schema later, add a new entry with a
+# future date rather than editing this one.
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Reject log lines older than 7 days. This prevents Promtail from
+  # accidentally re-shipping old logs after a restart.
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Disable structured metadata to avoid a Loki 3.x bug where the byte
+  # size calculation goes negative, causing "negative structured metadata
+  # bytes received" errors. Promtail does not send structured metadata so
+  # disabling this has no effect on log content.
+  allow_structured_metadata: false
