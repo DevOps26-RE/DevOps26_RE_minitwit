@@ -1,11 +1,12 @@
 package main
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -166,9 +167,9 @@ func format_datetime(timestamp int64) string {
 }
 
 func gravatar_url(email string, size int) string {
-	email = strings.ToLower(strings.TrimSpace(email))
-	hash := md5.Sum([]byte(email))
-	return fmt.Sprintf("https://www.gravatar.com/avatar/%x?d=identicon&s=%d", hash, size)
+	address := strings.ToLower(strings.TrimSpace(email))
+	hash := sha256.Sum256([]byte(address))
+	return fmt.Sprintf("https://www.gravatar.com/avatar/sha256/%x?d=identicon&s=%d", hash, size)
 }
 
 func before_request(c *gin.Context) {
@@ -262,7 +263,8 @@ func follow_user(c *gin.Context) {
 	}
 
 	db.Create(&Follower{WhoID: currUser.UserID, WhomID: whomID})
-	c.Redirect(http.StatusFound, "/"+username)
+	redirectURL := url.URL{Path: "/" + username}
+	c.Redirect(http.StatusFound, redirectURL.String())
 }
 
 func unfollow_user(c *gin.Context) {
@@ -283,7 +285,8 @@ func unfollow_user(c *gin.Context) {
 	}
 
 	db.Where("who_id = ? AND whom_id = ?", currUser.UserID, whomID).Delete(&Follower{})
-	c.Redirect(http.StatusFound, "/"+username)
+	redirectURL := url.URL{Path: "/" + username}
+	c.Redirect(http.StatusFound, redirectURL.String())
 }
 
 func add_message(c *gin.Context) {
