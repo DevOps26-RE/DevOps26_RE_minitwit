@@ -1,6 +1,6 @@
 module RE_minitwit
 
-go 1.25.7
+go 1.25.8
 
 require (
 	github.com/gin-contrib/sessions v1.0.4
