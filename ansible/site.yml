@@ -1,6 +1,179 @@
+---
+# =============================================================================
+# ansible/site.yml — Main Playbook for MiniTwit Swarm Infrastructure
+# =============================================================================
+#
+# OVERVIEW:
+#   This playbook replaces the original single-play `hosts: all` approach
+#   with targeted plays per host group. Each play runs a focused role on
+#   exactly the hosts that need it, in dependency order.
+#
+# USAGE:
+#   Full provisioning (skip live-cutover phases):
+#     ansible-playbook ansible/site.yml --skip-tags phase3,phase4
+#
+#   Phase 3 — zero-downtime cutover (after swarm validated on Node 3):
+#     ansible-playbook ansible/site.yml --tags phase3
+#
+#   Phase 4 — remove iptables rules (after Traefik switched to global):
+#     ansible-playbook ansible/site.yml --tags phase4
+#
+#   Re-deploy stack only (e.g. after editing docker-stack.yml):
+#     ansible-playbook ansible/site.yml --tags swarm_stack_deploy
+#
+# PLAY ORDER (dependency chain):
+#   1. docker_install — all nodes must have Docker before anything else
+#   2. swarm_init     — swarm must exist before labels or stack can be set
+#   3. dbserver join  — dbserver must join swarm after manager tokens set
+#   4. swarm_labels   — labels must exist before stack deployment
+#   5. db_setup       — PostgreSQL must be running before web stack
+#   6. swarm_stack_deploy — deploy the application stack
+#   7. [phase3] iptables_forward — zero-downtime cutover of Node 1
+#   8. [phase4] iptables_cleanup — remove forwarding rules after Traefik global
+#
+# INVENTORY:
+#   Uses ansible/inventory/hosts.ini (static, not Vagrant-generated).
+#   Set private_ip and public IPs in ansible/inventory/host_vars/ first.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Play 1: Install Docker on ALL nodes
+# ---------------------------------------------------------------------------
+# Runs first because every subsequent play requires Docker to be running.
+# This includes dbserver even though it runs docker-compose (not Swarm);
+# docker-compose v2 requires the Docker daemon.
 - hosts: all
   become: true
   vars_files:
-    - credentials.yml   # to be removed later
+    - credentials.yml
   roles:
-    - docker_app
+    - docker_install
+
+# ---------------------------------------------------------------------------
+# Play 2: Initialize Docker Swarm on swarmnode (Node 3)
+# ---------------------------------------------------------------------------
+# Creates the Swarm cluster and exposes join tokens as host facts.
+# Only runs on swarm_managers group (swarmnode). The facts set here
+# (swarm_manager_token, swarm_worker_token) persist for this Ansible run
+# and are consumed by Play 3 and Play 7.
+- hosts: swarm_managers
+  become: true
+  roles:
+    - swarm_init
+
+# ---------------------------------------------------------------------------
+# Play 3: Join dbserver (Node 2) to the swarm as a manager
+# ---------------------------------------------------------------------------
+# WHY a separate play (not inside swarm_init role)?
+#   The docker_swarm: state=join module must run ON the node that is joining
+#   (dbserver), not on the manager. Putting this in swarm_init would require
+#   delegate_to: dbserver which creates confusing hostvars scoping.
+#   A separate play targeting db_server is cleaner and more readable.
+#
+# WHY manager (not worker)?
+#   2 managers = 2/3 quorum lost if swarmnode dies.
+#   Only after webserver joins in Phase 3 do we have 3 managers and true
+#   fault tolerance (can lose any 1 manager).
+- hosts: db_server
+  become: true
+  tasks:
+    - name: Check if dbserver is already in swarm
+      community.docker.docker_swarm_info:
+      register: db_swarm_info
+      ignore_errors: true
+
+    - name: Join dbserver to swarm as manager
+      community.docker.docker_swarm:
+        state: join
+        advertise_addr: "{{ private_ip }}"
+        join_token: "{{ hostvars['swarmnode']['swarm_manager_token'] }}"
+        remote_addrs:
+          - "{{ hostvars['swarmnode']['private_ip'] }}:2377"
+      when: not (db_swarm_info.docker_swarm_active | default(false))
+
+# ---------------------------------------------------------------------------
+# Play 4: Assign placement labels on swarm nodes
+# ---------------------------------------------------------------------------
+# Labels must be set BEFORE stack deployment or services will fail to
+# schedule (Swarm looks for matching nodes at deploy time, not lazily).
+- hosts: swarm_managers
+  become: true
+  roles:
+    - swarm_labels
+
+# ---------------------------------------------------------------------------
+# Play 5: Deploy PostgreSQL on dbserver via docker-compose
+# ---------------------------------------------------------------------------
+# PostgreSQL is kept outside the Swarm stack deliberately (see db_setup
+# role README for full rationale). It must be running before the web
+# service starts so the DB connection is ready when web containers launch.
+- hosts: db_server
+  become: true
+  vars_files:
+    - credentials.yml
+  roles:
+    - db_setup
+
+# ---------------------------------------------------------------------------
+# Play 6: Deploy the Swarm application stack
+# ---------------------------------------------------------------------------
+# Copies docker-stack.yml and config files to swarmnode, then runs
+# `docker stack deploy`. Running after db_setup ensures the database is
+# ready when web containers start polling DB_ADDR.
+- hosts: swarm_managers
+  become: true
+  vars_files:
+    - credentials.yml
+  roles:
+    - swarm_stack_deploy
+  tags:
+    - swarm_stack_deploy
+
+# ---------------------------------------------------------------------------
+# Play 7: Phase 3 — Zero-downtime cutover of Node 1
+# ---------------------------------------------------------------------------
+# Tags: phase3
+# Run this ONLY after validating that the swarm stack is healthy on Node 3:
+#   curl http://<NODE3_PUBLIC_IP>:5001/
+#
+# Steps (automated in iptables_forward.yml):
+#   1. Enable IP forwarding on Node 1 (kernel routing)
+#   2. Add iptables PREROUTING rule: forward Node 1's port 5001 → Node 3
+#   3. Add iptables POSTROUTING masquerade (return traffic routing)
+#   4. Health-check that Node 3 is serving traffic (retry loop)
+#   5. Stop docker-compose stack on Node 1
+#   6. Join Node 1 to swarm as a manager (becomes the 3rd manager)
+#
+# After this play, traffic flow is:
+#   Simulator → Node 1 Public IP → iptables DNAT → Node 3 → Swarm routing mesh
+#   AND Node 1 is now part of the swarm, running monitoring services.
+- hosts: webserver
+  become: true
+  tags:
+    - phase3
+    - never  # 'never' tag means this play is SKIPPED unless --tags phase3
+  tasks:
+    - ansible.builtin.import_tasks: tasks/iptables_forward.yml
+
+# ---------------------------------------------------------------------------
+# Play 8: Phase 4 — Remove iptables rules, finalize routing
+# ---------------------------------------------------------------------------
+# Tags: phase4
+# Run this AFTER:
+#   1. Editing docker-stack.yml to change Traefik deploy section to:
+#        deploy:
+#          mode: global
+#      and removing placement constraints
+#   2. Re-running Play 6: ansible-playbook site.yml --tags swarm_stack_deploy
+#   3. Confirming Traefik is running on all nodes:
+#        docker service ps minitwit_stack_traefik
+#
+# Once Traefik is global, every node listens on port 5001 natively via
+# Swarm's routing mesh. The iptables forwarding rules are no longer needed.
+- hosts: webserver
+  become: true
+  tags:
+    - phase4
+    - never  # skipped unless --tags phase4
+  tasks:
+    - ansible.builtin.import_tasks: tasks/iptables_cleanup.yml

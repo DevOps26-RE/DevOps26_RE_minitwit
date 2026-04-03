@@ -1,0 +1,58 @@
+---
+# =============================================================================
+# ansible/tasks/iptables_cleanup.yml
+# Phase 4: Remove iptables forwarding rules
+# Hosts: webserver (Node 1)
+# Tags:  phase4
+# =============================================================================
+#
+# CONTEXT:
+#   By this point:
+#   - Phase 3 is complete: Node 1 is in the swarm, Compose is stopped,
+#     monitoring services are running on Node 1 via Swarm
+#   - docker-stack.yml has been updated to change Traefik to global mode:
+#       deploy:
+#         mode: global    # runs one Traefik instance on EVERY node
+#     and the stack has been redeployed with Play 6 / --tags swarm_stack_deploy
+#   - `docker service ps minitwit_stack_traefik` shows Traefik running on
+#     all three nodes, each listening on port 5001
+#
+#   Now: ALL three nodes are serving port 5001 natively via Swarm's routing
+#   mesh. The iptables DNAT rule on Node 1 is no longer needed — Node 1's
+#   own Traefik instance handles traffic directly.
+#
+# WHY CLEAN UP:
+#   Leaving DNAT rules in place after they are no longer needed can cause
+#   subtle bugs. For example, traffic targeting Node 3 directly would be
+#   double-forwarded. Cleanup restores predictable network behaviour.
+#
+# NOTE: `state: absent` on the iptables module removes the rule only if it
+# exists. If the rule was already removed manually, the task is a no-op.
+# =============================================================================
+
+- name: Remove PREROUTING DNAT forwarding rule
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    protocol: tcp
+    destination_port: '5001'
+    jump: DNAT
+    to_destination: "{{ hostvars['swarmnode']['private_ip'] }}:5001"
+    comment: "swarm-migration-phase3"
+    state: absent
+
+- name: Remove POSTROUTING MASQUERADE rule
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    destination: "{{ hostvars['swarmnode']['private_ip'] }}"
+    jump: MASQUERADE
+    comment: "swarm-migration-phase3"
+    state: absent
+
+# Save the updated iptables ruleset so it survives reboots.
+# On Ubuntu 22.04, iptables rules are not persisted by default.
+- name: Save iptables rules to persist across reboots
+  ansible.builtin.command: iptables-save
+  register: iptables_saved
+  changed_when: true

@@ -1,0 +1,136 @@
+---
+# =============================================================================
+# ansible/tasks/iptables_forward.yml
+# Phase 3: Zero-Downtime Traffic Cutover
+# Hosts: webserver (Node 1)
+# Tags:  phase3
+# =============================================================================
+#
+# CONTEXT:
+#   At this point:
+#   - Node 3 (swarmnode) is running the Swarm stack with Traefik on port 5001
+#   - Node 1 (webserver) is STILL running the old docker-compose stack
+#   - The simulator is sending traffic to Node 1's public IP on port 5001
+#
+#   Goal: seamlessly redirect simulator traffic from the old Compose stack on
+#   Node 1 to the new Swarm stack on Node 3, without dropping any requests.
+#
+# HOW IT WORKS:
+#   Linux netfilter (iptables) processes packets in the PREROUTING hook
+#   BEFORE the local process ever sees them. By adding a DNAT rule, we
+#   intercept packets destined for port 5001 and rewrite the destination IP
+#   to Node 3's private IP — at the kernel level, transparently.
+#
+#   The simulator continues connecting to Node 1's public IP.
+#   The kernel silently forwards those packets to Node 3.
+#   Node 3's Traefik receives them and routes them to a web container.
+#   Responses are MASQUERADE'd back through Node 1 so the simulator sees
+#   traffic coming from the expected source IP.
+#
+# SEQUENCE:
+#   1. Enable IP forwarding (disabled by default on Ubuntu)
+#   2. Add PREROUTING DNAT rule (intercept + rewrite destination)
+#   3. Add POSTROUTING MASQUERADE rule (rewrite source for return traffic)
+#   4. Validate Node 3 is responding (retry loop before tearing down Compose)
+#   5. Stop docker-compose stack on Node 1 (port 5001 is now free)
+#   6. Join Node 1 to the swarm (it becomes the 3rd manager + monitoring host)
+#
+# ROLLBACK:
+#   If Node 3 health check fails, tasks 5 and 6 do NOT run (conditional
+#   on swarm_health.status being successful). Re-run with --tags phase3
+#   after diagnosing Node 3.
+#   To manually remove iptables rules if needed:
+#     iptables -t nat -D PREROUTING -p tcp --dport 5001 -j DNAT --to-destination <NODE3_PRIVATE_IP>:5001
+#     iptables -t nat -D POSTROUTING -j MASQUERADE
+# =============================================================================
+
+# IP forwarding must be enabled for the kernel to forward packets between
+# interfaces. It is disabled by default on Ubuntu for security.
+# ansible.posix.sysctl makes this persistent across reboots via /etc/sysctl.conf.
+- name: Enable IP forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: true
+    state: present
+    reload: true
+
+# PREROUTING hook: runs on incoming packets BEFORE routing decision.
+# DNAT rewrites the destination IP so packets are forwarded to Node 3.
+# The `comment` field allows us to identify and delete this rule precisely
+# in the cleanup phase (iptables_cleanup.yml).
+- name: Add PREROUTING DNAT rule to forward port 5001 to swarmnode
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    protocol: tcp
+    destination_port: '5001'
+    jump: DNAT
+    to_destination: "{{ hostvars['swarmnode']['private_ip'] }}:5001"
+    comment: "swarm-migration-phase3"
+
+# POSTROUTING hook: runs on outgoing packets AFTER routing decision.
+# MASQUERADE rewrites the source IP of forwarded packets to this node's
+# IP so that return traffic comes back through Node 1 (which knows how
+# to reverse-NAT it back to the original client).
+- name: Add POSTROUTING MASQUERADE rule for return traffic
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    destination: "{{ hostvars['swarmnode']['private_ip'] }}"
+    jump: MASQUERADE
+    comment: "swarm-migration-phase3"
+
+# SAFETY CHECK: Validate that Node 3 is actually serving HTTP before we
+# tear down the Compose stack. If this fails all retries, the next two
+# tasks (down + join) will not run because of the `when` guard.
+# Status codes 200/301/302 all indicate a live web server response.
+- name: Validate swarm stack is serving traffic on Node 3
+  ansible.builtin.uri:
+    url: "http://{{ hostvars['swarmnode']['private_ip'] }}:5001/"
+    status_code: [200, 301, 302]
+    timeout: 10
+  register: swarm_health
+  retries: 5
+  delay: 3
+  until: swarm_health.status in [200, 301, 302]
+
+# Only tear down Compose if Node 3 health check passed.
+# `state: absent` is equivalent to `docker compose down`.
+- name: Stop old docker-compose stack on Node 1
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_deploy_dir }}"
+    files:
+      - docker-compose-app.yaml
+    state: absent
+  when: swarm_health.status in [200, 301, 302]
+
+# Join Node 1 to the swarm as a MANAGER (not worker) to complete the
+# 3-manager HA configuration. After this step:
+#   - swarmnode: manager
+#   - dbserver:  manager
+#   - webserver: manager  ← joins here
+# The cluster can now tolerate losing any 1 node without losing quorum.
+# Swarm will automatically schedule monitoring services here because
+# webserver has the role=monitoring label (set in swarm_labels role,
+# ignore_errors=true run on first pass, successful here since it's in swarm now).
+- name: Join Node 1 (webserver) to swarm as manager
+  community.docker.docker_swarm:
+    state: join
+    advertise_addr: "{{ private_ip }}"
+    join_token: "{{ hostvars['swarmnode']['swarm_manager_token'] }}"
+    remote_addrs:
+      - "{{ hostvars['swarmnode']['private_ip'] }}:2377"
+  when: swarm_health.status in [200, 301, 302]
+
+# Re-apply the monitoring label now that webserver is in the swarm.
+# This was skipped with ignore_errors=true in the swarm_labels role
+# during the initial provisioning run.
+- name: Apply monitoring label to webserver now that it is in the swarm
+  community.docker.docker_node:
+    hostname: webserver
+    labels:
+      role: monitoring
+    labels_state: merge
+  delegate_to: "{{ hostvars['swarmnode']['ansible_host'] }}"
+  when: swarm_health.status in [200, 301, 302]
