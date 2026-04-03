@@ -1,0 +1,20 @@
+---
+# =============================================================================
+# Host variables for swarmnode (Node 3 — Swarm Manager / Traefik Ingress)
+# =============================================================================
+#
+# private_ip: The VPC private IP (10.x.x.x) assigned by DigitalOcean.
+#   Fill this in after `vagrant up swarmnode`. It is used as:
+#     - Docker Swarm's --advertise-addr (inter-node cluster traffic)
+#     - The DNAT destination in the iptables forwarding rule on Node 1
+#     - The DB_ADDR in the stack .env (via hostvars['dbserver']['private_ip'])
+#
+# node_role_label: The value of the Docker Swarm node label `role`.
+#   Used in docker-stack.yml placement constraints:
+#     - node.labels.role == ingress  → Traefik runs here initially
+#   After Phase 4, Traefik switches to `mode: global` so this constraint
+#   is removed and Traefik runs on every node.
+# =============================================================================
+
+private_ip: <NODE3_PRIVATE_IP>
+node_role_label: ingress

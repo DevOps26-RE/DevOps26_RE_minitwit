@@ -1,0 +1,23 @@
+---
+# =============================================================================
+# Group variables shared by ALL hosts
+# =============================================================================
+#
+# These are read from environment variables at playbook runtime, so no
+# secrets are stored in this file. credentials.yml (gitignored) also
+# provides these for the docker_install role's Docker Hub login step.
+# =============================================================================
+
+# Docker Hub credentials — consumed by the docker_install role for `docker login`
+dockerhub_username: "{{ lookup('env', 'DOCKERHUB_USERNAME') }}"
+dockerhub_token:    "{{ lookup('env', 'DOCKERHUB_TOKEN') }}"
+
+# Swarm stack name — Docker prefixes all service names with this.
+# e.g. swarm_stack_name=minitwit_stack → service name: minitwit_stack_web
+# The GitHub Actions deploy step uses this to build the service name for
+# `docker service update`.
+swarm_stack_name: minitwit_stack
+
+# Filesystem paths used across multiple roles
+app_deploy_dir: /opt/minitwit
+db_deploy_dir:  /opt/minitwit-db

@@ -1,0 +1,23 @@
+---
+# =============================================================================
+# Ansible Galaxy collection requirements
+# =============================================================================
+#
+# Install with:
+#   ansible-galaxy collection install -r ansible/requirements.yml
+#
+# community.docker  — Docker modules used across all roles:
+#   docker_login, docker_image, docker_compose_v2, docker_swarm,
+#   docker_swarm_info, docker_node, docker_stack
+#
+# ansible.posix     — POSIX system modules used in iptables tasks:
+#   ansible.posix.sysctl  (enable net.ipv4.ip_forward)
+#   ansible.builtin.iptables is part of ansible-core, but ansible.posix
+#   is needed for the sysctl module which is not in ansible-core.
+# =============================================================================
+
+collections:
+  - name: community.docker
+    version: ">=3.4.0"
+  - name: ansible.posix
+    version: ">=1.5.0"

@@ -1,0 +1,31 @@
+---
+# =============================================================================
+# Host variables for dbserver (Node 2 — PostgreSQL + Swarm Manager)
+# =============================================================================
+#
+# private_ip: The VPC private IP (10.x.x.x) assigned by DigitalOcean.
+#   Fill this in after `vagrant up dbserver`. This IP is critical:
+#   - Docker Swarm's --advertise-addr when dbserver joins as a manager
+#   - The DB_ADDR environment variable passed to the web service:
+#       postgres://minitwit:minitwit@<NODE2_PRIVATE_IP>:5432/minitwit
+#     Using the private IP instead of the public IP ensures DB traffic
+#     stays on the private VPC network (faster, no egress costs, secure).
+#
+# node_role_label: database
+#   Currently unused by docker-stack.yml placement constraints, but
+#   set for future use (e.g. pinning a database exporter service).
+#   The web service is explicitly excluded from dbserver using:
+#     node.hostname != dbserver
+#   to keep CPU/RAM free for PostgreSQL.
+#
+# Why does dbserver join as a Swarm MANAGER (not worker)?
+#   For HA, Docker Swarm requires an odd number of managers (1, 3, 5...).
+#   With only swarmnode as manager: losing it = no cluster control.
+#   Joining dbserver as manager gives you 2/3 managers from Phase 1,
+#   so the cluster survives Node 3 going down during the cutover.
+#   PostgreSQL is unaffected — it runs via docker-compose, outside the
+#   swarm stack, so joining the swarm does not change its behavior.
+# =============================================================================
+
+private_ip: <NODE2_PRIVATE_IP>
+node_role_label: database

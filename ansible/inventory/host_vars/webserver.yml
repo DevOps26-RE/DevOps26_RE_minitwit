@@ -1,0 +1,31 @@
+---
+# =============================================================================
+# Host variables for webserver (Node 1 — Monitoring Stack / Live Traffic)
+# =============================================================================
+#
+# private_ip: The VPC private IP (10.x.x.x) assigned by DigitalOcean.
+#   Fill this in after the node exists. Used as Docker Swarm's
+#   --advertise-addr when Node 1 joins the swarm in Phase 3.
+#
+# node_role_label: monitoring
+#   Controls placement in docker-stack.yml. All monitoring services
+#   (prometheus, loki, promtail, grafana) are constrained to this label.
+#   Rationale: these services use named volumes (prometheus_data,
+#   grafana_data, loki_data). Docker Swarm named volumes are local to
+#   the node. Pinning all monitoring to one node ensures the data is
+#   always accessible, avoids split-brain volume state, and allows
+#   bind-mounting config files (loki-config.yaml, etc.) without needing
+#   Docker Configs or NFS.
+#
+# Why does webserver join the swarm LAST?
+#   Node 1 is handling live production traffic via docker-compose when
+#   the swarm migration begins. It cannot join the swarm until:
+#   1. The swarm stack is running and healthy on Node 3
+#   2. iptables PREROUTING rules are forwarding Node 1's port 5001 to
+#      Node 3's private IP (so traffic continues uninterrupted)
+#   3. The old docker-compose stack on Node 1 is stopped
+#   This sequence is automated by the phase3-tagged tasks in site.yml.
+# =============================================================================
+
+private_ip: <NODE1_PRIVATE_IP>
+node_role_label: monitoring
