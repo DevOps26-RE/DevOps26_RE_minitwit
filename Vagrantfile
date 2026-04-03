@@ -24,9 +24,26 @@ Vagrant.configure("2") do |config|
     db.vm.hostname = "dbserver"
   end 
 
-  # --- Web Server with Doscker ---
+  # --- Swarm Manager / Ingress Node (Node 3) ---
+  # This is the NEW third droplet added for the Docker Swarm migration.
+  # It serves as the initial swarm manager and Traefik ingress node.
+  # Size s-1vcpu-2gb (vs 1gb for others) because it runs Traefik + swarm
+  # manager heartbeat overhead simultaneously during the cutover phase.
+  config.vm.define "swarmnode" do |swarm|
+    swarm.vm.provider :digital_ocean do |provider|
+      provider.ssh_key_name = ENV["SSH_KEY_NAME"]
+      provider.token        = ENV["DIGITAL_OCEAN_TOKEN"]
+      provider.image        = 'ubuntu-22-04-x64'
+      provider.region       = 'fra1'
+      provider.size         = 's-1vcpu-2gb'
+      provider.privatenetworking = true
+    end
+    swarm.vm.hostname = "swarmnode"
+  end
+
+  # --- Web Server with Docker ---
   config.vm.define "webserver" do |web|
-    
+
     web.vm.provider :digital_ocean do |provider|
       provider.ssh_key_name = ENV["SSH_KEY_NAME"]
       provider.token        = ENV["DIGITAL_OCEAN_TOKEN"]
@@ -38,11 +55,14 @@ Vagrant.configure("2") do |config|
 
     web.vm.hostname = "webserver"
 
-    # Ansible runs ONCE here after both VMs are up
+    # Ansible runs ONCE here after all three VMs are up.
+    # inventory_path points to our new static inventory which replaces
+    # the implicit Vagrant-generated inventory so we can use host groups.
     web.vm.provision "ansible" do |ansible|
       ansible.playbook       = "ansible/site.yml"
       ansible.limit          = "all"
       ansible.verbose        = "v"
+      ansible.inventory_path = "ansible/inventory"
     end
   end
 end
