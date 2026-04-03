@@ -143,43 +143,72 @@ jobs:
               repo: context.repo.repo,
               body: body
             });
+  # ---------------------------------------------------------------------------
+  # Deploy — Docker Swarm rolling update
+  # ---------------------------------------------------------------------------
+  # WHAT CHANGED from the old deploy job:
+  #   OLD: scp files to server → ssh → docker compose pull → docker compose up
+  #   NEW: ssh → docker service update --image <new-tag>
+  #
+  # WHY the change:
+  #   1. docker compose up restarts ALL containers every deploy, causing brief
+  #      downtime. `docker service update` does a rolling update: starts the
+  #      new container (start-first policy), waits for it to be healthy, then
+  #      stops the old one. Zero downtime.
+  #   2. Config files (loki/, promtail/, grafana/, docker-stack.yml) no longer
+  #      need copying on every deploy — Ansible manages them. CI only ships
+  #      new Docker image tags.
+  #   3. The deploy target is now DO_SWARM_HOST (Node 3 / swarmnode), not
+  #      DO_HOST (Node 1). Any Swarm manager can run `docker service update`.
+  #
+  # REQUIRED GITHUB SECRETS (update in repo Settings → Secrets):
+  #   DO_SWARM_HOST    Public IP of swarmnode (Node 3) — new
+  #   DO_USER          SSH username (root) — unchanged
+  #   DO_SSH_KEY       SSH private key for swarmnode — update if different
+  #   DO_SWARM_HOST_STAGE  Stage swarmnode IP — for non-main branches
+  #   DO_SSH_KEY_STAGE     Stage SSH key — unchanged
+  #
+  # SERVICE NAMES follow the pattern: <stack_name>_<service_name>
+  #   Stack name is set in ansible/inventory/group_vars/all.yml: minitwit_stack
+  #   So: minitwit_stack_web, minitwit_stack_prometheus
+  #   Verify with: docker service ls  (on any swarm manager)
+  # ---------------------------------------------------------------------------
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Copy docker-compose file to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          source: "docker-compose-app.yaml,loki,promtail,grafana"
-          target: "/opt/minitwit"
-          overwrite: true
-
-      - name: Deploy via SSH
+      - name: Deploy app image to Swarm (rolling update)
+        # Triggers a rolling update of the web service with the new image.
+        # --update-order start-first: start new → wait healthy → stop old
+        # --update-failure-action rollback: auto-revert if new container fails
+        # --with-registry-auth: passes Docker Hub credentials from the manager
+        #   node's stored login so Swarm workers can pull the new image.
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          DB_ADDR: ${{ github.ref == 'refs/heads/main' && secrets.DO_DB || secrets.DO_DB_STAGE }}
-          DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit:${{ needs.build-and-push.outputs.image_tag }}
-          PROM_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit-prometheus:${{ needs.build-and-push.outputs.image_tag }}
-          PROM_URL: ${{ format('http://{0}.com:5001/prometheus', github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE) }}
-          GRAFANA_URL: ${{ format('http://{0}.com:5001/grafana/', github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE) }}
         with:
-          host: ${{ github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE }}
+          host: ${{ github.ref == 'refs/heads/main' && secrets.DO_SWARM_HOST || secrets.DO_SWARM_HOST_STAGE }}
           username: ${{ secrets.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,PROM_URL,GRAFANA_URL
           script: |
-            cd /opt/minitwit
-            echo "DOCKER_IMAGE=${DOCKER_IMAGE}" > .env
-            # Write the PROM_IMAGE variable into the .env file on the server
-            echo "PROM_IMAGE=${PROM_IMAGE}" >> .env
-            echo "DB_ADDR=${DB_ADDR}" >> .env
-            echo "PROM_URL=${PROM_URL}" >> .env
-            echo "GRAFANA_URL=${GRAFANA_URL}" >> .env
-            docker compose -f docker-compose-app.yaml pull
-            docker compose -f docker-compose-app.yaml up -d
-            docker image prune -f
+            docker service update \
+              --image ${{ secrets.DOCKERHUB_USERNAME }}/minitwit:${{ needs.build-and-push.outputs.image_tag }} \
+              --update-order start-first \
+              --update-failure-action rollback \
+              --with-registry-auth \
+              minitwit_stack_web
+
+      - name: Deploy prometheus image to Swarm (rolling update)
+        # Separate step so a web update failure (and rollback) does not
+        # also skip the prometheus update, and vice versa. The two services
+        # are independently versioned and independently deployable.
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ github.ref == 'refs/heads/main' && secrets.DO_SWARM_HOST || secrets.DO_SWARM_HOST_STAGE }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
+          script: |
+            docker service update \
+              --image ${{ secrets.DOCKERHUB_USERNAME }}/minitwit-prometheus:${{ needs.build-and-push.outputs.image_tag }} \
+              --update-order start-first \
+              --update-failure-action rollback \
+              --with-registry-auth \
+              minitwit_stack_prometheus
