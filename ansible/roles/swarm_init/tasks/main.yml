@@ -1,0 +1,79 @@
+---
+# =============================================================================
+# Role: swarm_init
+# Hosts: swarm_managers (swarmnode only in hosts.ini)
+# Purpose: Initialize the Docker Swarm cluster and join Node 2 (dbserver)
+#          as a second manager for high availability.
+# =============================================================================
+#
+# Execution order:
+#   1. Check if swarm is already active on this host (idempotency guard)
+#   2. Initialize swarm on swarmnode using the private VPC IP as advertise-addr
+#      WHY private IP: Swarm manager-to-manager and manager-to-worker traffic
+#      (Raft consensus on port 2377, gossip on port 7946, overlay VXLAN on
+#      port 4789) must use the private network to avoid:
+#        a) Exposing cluster control traffic to the public internet
+#        b) DigitalOcean charges for bandwidth on public IPs
+#   3. Retrieve join tokens from the initialized manager and store as facts
+#      so other plays/roles can read them via hostvars['swarmnode']
+#   4. Join dbserver as a MANAGER (not worker) for HA:
+#      - With only 1 manager, losing swarmnode = total cluster loss
+#      - With 2 managers, the cluster still loses quorum if swarmnode dies
+#        (Raft requires (N/2)+1 votes; 2 nodes need both alive)
+#      - Node 1 (webserver) will become the 3rd manager in Phase 3,
+#        giving a true fault-tolerant 3-manager cluster (can lose 1)
+#
+# NOTE: webserver (Node 1) is intentionally NOT joined here. It must stay
+# outside the swarm until after the iptables traffic forwarding cutover
+# in Phase 3 (ansible/tasks/iptables_forward.yml).
+#
+# Token distribution pattern:
+#   We use set_fact on swarmnode and read via hostvars['swarmnode'] from
+#   other plays. This is cleaner than delegate_to which causes confusing
+#   hostvars scoping when you have multiple plays in one playbook run.
+# =============================================================================
+
+- name: Check current swarm state on this node
+  community.docker.docker_swarm_info:
+  register: swarm_info
+  ignore_errors: true
+
+# Initialize only if this node is not already a swarm manager.
+# The `not ... | default(false)` pattern handles the case where
+# docker_swarm_info fails (e.g. docker not running) without crashing.
+- name: Initialize Docker Swarm on swarmnode
+  community.docker.docker_swarm:
+    state: present
+    advertise_addr: "{{ private_ip }}"
+  register: swarm_init_result
+  when:
+    - inventory_hostname == 'swarmnode'
+    - not (swarm_info.docker_swarm_active | default(false))
+
+# Retrieve the current join tokens. We always re-fetch even if swarm was
+# already active, because tokens may have been rotated.
+- name: Get swarm join tokens from manager
+  community.docker.docker_swarm_info:
+    nodes: true
+  register: swarm_manager_info
+  when: inventory_hostname == 'swarmnode'
+
+# Expose tokens as host facts. Other plays read these via:
+#   hostvars['swarmnode']['swarm_worker_token']
+#   hostvars['swarmnode']['swarm_manager_token']
+# Facts persist for the duration of the Ansible run (not across runs).
+# The join step below is idempotent — docker_swarm: state=join is a no-op
+# if the node is already a member, so re-running the playbook is safe.
+- name: Set join token facts on swarmnode
+  ansible.builtin.set_fact:
+    swarm_worker_token:  "{{ swarm_manager_info.swarm_facts.JoinTokens.Worker }}"
+    swarm_manager_token: "{{ swarm_manager_info.swarm_facts.JoinTokens.Manager }}"
+  when: inventory_hostname == 'swarmnode'
+
+# Join dbserver as a manager.
+# WHY this play runs on swarm_managers (swarmnode) but controls dbserver:
+#   The docker_swarm module with state=join must run on the TARGET node
+#   (dbserver), but the token and remote_addr come from swarmnode facts.
+#   We handle this by having a separate play in site.yml that targets
+#   db_server and reads hostvars['swarmnode']. See site.yml for the
+#   separate "Join dbserver to swarm" play.

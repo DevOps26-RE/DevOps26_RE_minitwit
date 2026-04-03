@@ -1,0 +1,196 @@
+---
+# =============================================================================
+# Role: docker_install
+# Hosts: all (webserver, dbserver, swarmnode)
+# Purpose: Install Docker Engine, Compose plugin, and Buildx on every node.
+# =============================================================================
+#
+# This role is extracted verbatim from the original docker_app role (lines 1-170)
+# with the `when: inventory_hostname ==` guards removed since this role is
+# always scoped to `hosts: all` in site.yml.
+#
+# Runs BEFORE any swarm or application roles because every node needs Docker
+# before it can join a swarm or run containers.
+# =============================================================================
+
+##################################################
+# WAIT FOR APT TO BE READY
+##################################################
+
+- name: Wait for apt lock to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "Waiting for apt lock..."
+      sleep 5
+    done
+  changed_when: false
+  no_log: true
+
+- name: Wait for unattended upgrades to finish
+  shell: |
+    while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+      echo "Waiting for apt lists lock..."
+      sleep 5
+    done
+  changed_when: false
+  no_log: true
+
+- name: Fix interrupted dpkg
+  command: dpkg --configure -a
+  ignore_errors: true
+  no_log: true
+
+- name: Clean apt cache
+  command: apt-get clean
+  no_log: true
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+    lock_timeout: 120
+  no_log: true
+
+##################################################
+# Install Docker
+##################################################
+
+- name: Remove conflicting Docker packages
+  apt:
+    name:
+      - containerd
+      - containerd.io
+      - docker
+      - docker-engine
+      - docker.io
+      - runc
+    state: absent
+    purge: true
+  ignore_errors: true
+  no_log: true
+
+- name: Install Docker dependencies
+  apt:
+    name:
+      - docker.io
+      - docker-compose
+      - containerd
+      - python3-pip
+    state: present
+    lock_timeout: 120
+  no_log: true
+
+- name: Install Docker Python SDK
+  pip:
+    name: docker
+  no_log: true
+
+- name: Create docker cli-plugins directory
+  file:
+    path: /usr/libexec/docker/cli-plugins
+    state: directory
+    mode: '0755'
+  no_log: true
+
+- name: Install Docker Compose plugin
+  get_url:
+    url: https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64
+    dest: /usr/libexec/docker/cli-plugins/docker-compose
+    mode: '0755'
+  no_log: true
+
+- name: Install Docker Buildx plugin
+  get_url:
+    url: https://github.com/docker/buildx/releases/download/v0.31.1/buildx-v0.31.1.linux-amd64
+    dest: /usr/libexec/docker/cli-plugins/docker-buildx
+    mode: '0755'
+  no_log: true
+
+##################################################
+# Configure containerd
+##################################################
+
+- name: Create containerd config directory
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
+  no_log: true
+
+- name: Generate containerd config
+  command: containerd config default
+  register: containerd_config
+  changed_when: false
+  no_log: true
+
+- name: Write containerd config
+  copy:
+    content: "{{ containerd_config.stdout }}"
+    dest: /etc/containerd/config.toml
+  no_log: true
+
+##################################################
+# Docker Hub authentication (runs locally, not on remote)
+# Needed so `docker pull` of private images works.
+##################################################
+
+- name: Log in to Docker Hub
+  community.docker.docker_login:
+    username: "{{ DOCKERHUB_USERNAME }}"
+    password: "{{ DOCKERHUB_TOKEN }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+##################################################
+# Build and push images (runs locally, not on remote)
+# Only builds the DB image when targeting dbserver and the app image
+# when targeting webserver, matching the original role behaviour.
+##################################################
+
+- name: Build DB image
+  community.docker.docker_image:
+    name: "{{ DOCKERHUB_USERNAME }}/minitwit-db:latest"
+    build:
+      path: "{{ playbook_dir }}/../"
+      dockerfile: docker/Dockerfile-db
+    source: build
+    push: true
+  delegate_to: localhost
+  become: false
+  when: inventory_hostname == "dbserver"
+  no_log: true
+
+- name: Build APP image
+  community.docker.docker_image:
+    name: "{{ DOCKERHUB_USERNAME }}/minitwit:latest"
+    build:
+      path: "{{ playbook_dir }}/../"
+      dockerfile: docker/Dockerfile-app
+      args:
+        GO_VERSION: "1.25.0"
+    source: build
+    push: true
+  delegate_to: localhost
+  become: false
+  when: inventory_hostname == "webserver"
+  no_log: true
+
+##################################################
+# Start container services
+##################################################
+
+- name: Start and enable containerd
+  systemd:
+    name: containerd
+    state: started
+    enabled: true
+    daemon_reload: true
+  no_log: true
+
+- name: Start and enable docker
+  systemd:
+    name: docker
+    state: started
+    enabled: true
+    daemon_reload: true
+  no_log: true

@@ -1,0 +1,8 @@
+---
+- name: redeploy stack
+  community.docker.docker_stack:
+    state: present
+    name: "{{ swarm_stack_name }}"
+    compose:
+      - "{{ app_deploy_dir }}/docker-stack.yml"
+    with_registry_auth: true

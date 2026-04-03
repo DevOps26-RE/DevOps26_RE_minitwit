@@ -1,0 +1,250 @@
+---
+# =============================================================================
+# docker-stack.yml — Docker Swarm Stack Definition
+# Replaces: docker-compose-app.yaml (which remains for local dev/testing only)
+# Deployed by: ansible/roles/swarm_stack_deploy
+# Updated by:  GitHub Actions (`docker service update --image ...`)
+# =============================================================================
+#
+# KEY DIFFERENCES from docker-compose-app.yaml:
+#
+# 1. OVERLAY NETWORK instead of bridge
+#    Bridge networks are local to a single Docker daemon. An overlay network
+#    spans all swarm nodes using VXLAN tunnels over the private VPC IPs.
+#    Containers on different nodes can reach each other by service name
+#    (e.g. http://loki:3100) only if they are on the same overlay network.
+#
+# 2. --providers.docker.swarmMode=true on Traefik
+#    In swarm mode, Traefik reads service labels (not container labels).
+#    Without this flag, Traefik ignores all `traefik.*` labels entirely.
+#
+# 3. traefik.docker.network label on EVERY service
+#    When a container has multiple network interfaces (e.g. overlay + host),
+#    Traefik picks the wrong IP without this label. This is the single most
+#    common silent failure in Swarm+Traefik setups.
+#
+# 4. Traefik port mode: host (not ingress)
+#    - `mode: ingress` uses Swarm's routing mesh: traffic hitting ANY node
+#      on port 5001 is load-balanced to a container. This is the default.
+#    - `mode: host` binds port 5001 directly on the host's network interface.
+#    We use `host` in Phase 2/3 because the iptables DNAT rule on Node 1
+#    forwards to Node 3's private IP. The routing mesh adds a DNAT of its
+#    own which can break the forwarding chain. In Phase 4, after iptables
+#    rules are removed and Traefik is switched to global mode, you can
+#    change this to `mode: ingress` for full routing mesh behaviour.
+#
+# 5. PLACEMENT CONSTRAINTS
+#    - traefik: node.labels.role == ingress  → Node 3 (swarmnode)
+#      Traefik must be on Node 3 initially so the iptables rule on Node 1
+#      forwards to the correct host. In Phase 4 this changes to mode: global.
+#    - web: node.hostname != dbserver
+#      Keeps app containers off the DB node to avoid CPU/RAM contention.
+#    - monitoring services: node.labels.role == monitoring → Node 1 (webserver)
+#      All monitoring is pinned to one node so named volumes stay accessible.
+#      See host_vars/webserver.yml for the detailed rationale.
+#
+# 6. update_config: order: start-first
+#    Swarm starts the NEW container and waits for it to be healthy BEFORE
+#    stopping the OLD container. This is the rolling update mechanism that
+#    provides zero-downtime deployments in GitHub Actions.
+#    failure_action: rollback means if the new container fails its health
+#    check, Swarm automatically reverts to the previous version.
+#
+# MIGRATION PHASES:
+#   Phase 2/3: Deploy this file as-is (Traefik pinned to swarmnode, mode: host)
+#   Phase 4:   Change traefik deploy section to: mode: global
+#              and remove placement constraints so it runs on every node.
+# =============================================================================
+
+networks:
+  overlay_net:
+    driver: overlay
+    # attachable: true allows non-swarm containers (e.g. debug containers
+    # run with `docker run`) to join this network for troubleshooting.
+    attachable: true
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Traefik — reverse proxy and load balancer
+  # ---------------------------------------------------------------------------
+  # In Phase 2/3: runs only on swarmnode (role=ingress constraint), port
+  # bound directly to the host (mode: host) so iptables DNAT from Node 1
+  # hits Traefik directly without Swarm's routing mesh interfering.
+  #
+  # In Phase 4: change deploy section to:
+  #   deploy:
+  #     mode: global        # runs one instance on EVERY node
+  # and remove placement constraints. Also change port mode to `ingress`
+  # if you want Swarm's built-in load balancing.
+  traefik:
+    image: traefik:v3.6
+    command:
+      - "--providers.docker=true"
+      # swarmMode=true: read service labels instead of container labels.
+      # Without this Traefik ignores all traefik.* labels on swarm services.
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:5001"
+      - "--accesslog=true"
+    ports:
+      - target: 5001
+        published: 5001
+        protocol: tcp
+        # mode: host binds directly to the host NIC. Required during
+        # Phase 2/3 so the iptables DNAT rule works predictably.
+        # Change to `mode: ingress` in Phase 4 for full routing mesh.
+        mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - overlay_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          # Pins Traefik to Node 3 (swarmnode) during Phase 2 and Phase 3.
+          # Remove this constraint in Phase 4 and change mode to `global`.
+          - node.labels.role == ingress
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  # ---------------------------------------------------------------------------
+  # Web application
+  # ---------------------------------------------------------------------------
+  web:
+    image: ${DOCKER_IMAGE:-runtimeerroritu/minitwit:latest}
+    environment:
+      # DB_ADDR uses Node 2's VPC private IP (set in .env by Ansible).
+      DB_ADDR: ${DB_ADDR}
+    networks:
+      - overlay_net
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        # start-first: new container starts and passes health check BEFORE
+        # the old one is stopped. This is what gives zero-downtime updates.
+        order: start-first
+        failure_action: rollback
+        delay: 5s
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          # Keep web replicas off the DB node to avoid resource contention.
+          # swarmnode and webserver both have role != database so both will
+          # receive web container replicas.
+          - node.hostname != dbserver
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.myweb.entrypoints=web"
+      - "traefik.http.routers.myweb.rule=PathPrefix(`/`)"
+      - "traefik.http.services.myweb.loadbalancer.server.port=5001"
+      # CRITICAL: tell Traefik which network to use for this service.
+      # Without this, Traefik picks the wrong interface when multiple
+      # networks are attached and routing silently breaks.
+      - "traefik.docker.network=minitwit_stack_overlay_net"
+
+  # ---------------------------------------------------------------------------
+  # Prometheus — metrics collection
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: ${PROM_IMAGE:-runtimeerroritu/minitwit-prometheus:latest}
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.external-url=${PROM_URL:-http://localhost:5001/prometheus}"
+      - "--web.route-prefix=/prometheus"
+    volumes:
+      - prometheus_data:/prometheus
+    networks:
+      - overlay_net
+    deploy:
+      placement:
+        constraints:
+          # Pin to webserver (Node 1) so the prometheus_data named volume
+          # is always on the same node and data is never lost on rescheduling.
+          - node.labels.role == monitoring
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.myprom.entrypoints=web"
+      - "traefik.http.routers.myprom.rule=PathPrefix(`/prometheus`)"
+      - "traefik.http.services.myprom.loadbalancer.server.port=9090"
+      - "traefik.http.routers.myprom.middlewares=prom-auth"
+      - "traefik.http.middlewares.prom-auth.basicauth.users=admin:$$apr1$$DeLv2Ozt$$Eo3rIkwIIqAmpdBKeCNHw1"
+      - "traefik.docker.network=minitwit_stack_overlay_net"
+
+  # ---------------------------------------------------------------------------
+  # Loki — log aggregation backend
+  # ---------------------------------------------------------------------------
+  # Not exposed externally. Promtail pushes logs to it; Grafana queries it.
+  loki:
+    image: grafana/loki:3.7.0
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      # Bind mount: config file must exist on the node where this container runs.
+      # Since this service is constrained to role=monitoring (webserver), Ansible
+      # copies loki-config.yaml to /opt/minitwit/loki/ on that node.
+      - /opt/minitwit/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - overlay_net
+    deploy:
+      placement:
+        constraints:
+          - node.labels.role == monitoring
+
+  # ---------------------------------------------------------------------------
+  # Promtail — log shipper (Docker → Loki)
+  # ---------------------------------------------------------------------------
+  # Must run on the same node as the Docker socket it reads from.
+  # Pinned to webserver (role=monitoring) which is where monitoring lives.
+  # In a full Swarm setup you'd run Promtail as `mode: global` on every
+  # node to capture logs from all nodes, but that requires a Loki setup
+  # that accepts multi-node writes. For now, single-node is sufficient.
+  promtail:
+    image: grafana/promtail:3.6.0
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - /opt/minitwit/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      # Docker socket: allows Promtail to discover container log paths.
+      # Must match the node where this container is scheduled.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - overlay_net
+    deploy:
+      placement:
+        constraints:
+          - node.labels.role == monitoring
+
+  # ---------------------------------------------------------------------------
+  # Grafana — dashboards and visualization
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SERVER_ROOT_URL=${GRAFANA_URL:-%(protocol)s://%(domain)s:%(http_port)s/grafana/}
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - /opt/minitwit/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+    networks:
+      - overlay_net
+    deploy:
+      placement:
+        constraints:
+          - node.labels.role == monitoring
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mygrafana.entrypoints=web"
+      - "traefik.http.routers.mygrafana.rule=PathPrefix(`/grafana`)"
+      - "traefik.http.services.mygrafana.loadbalancer.server.port=3000"
+      - "traefik.docker.network=minitwit_stack_overlay_net"

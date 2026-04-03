@@ -1,0 +1,87 @@
+---
+# =============================================================================
+# Role: swarm_stack_deploy
+# Hosts: swarm_managers (swarmnode / Node 3)
+# Purpose: Stage config files and deploy the Swarm stack from docker-stack.yml
+# =============================================================================
+#
+# This role runs AFTER swarm_labels because the stack references placement
+# constraints that depend on those labels being set. Deploying before labels
+# are set causes Swarm to schedule containers on wrong nodes (or fail to
+# schedule at all if labels don't match any node).
+#
+# What gets deployed:
+#   - docker-stack.yml: the Swarm-native stack definition (replaces
+#     docker-compose-app.yaml). Contains: traefik, web, prometheus, loki,
+#     promtail, grafana — all on overlay network with placement constraints.
+#   - Monitoring config files: loki/, promtail/, grafana/ directories are
+#     copied to {{ app_deploy_dir }} on swarmnode so that monitoring
+#     services can bind-mount them. WHY bind mounts instead of Docker Configs?
+#       - Docker Configs requires re-deploying the stack to update them
+#       - Bind mounts let Ansible update config files independently of stack
+#       - All monitoring services are pinned to webserver (role=monitoring)
+#         so the files are always available on the expected node
+#   - .env file: templated with private IPs and URLs. This file is read by
+#     the `docker stack deploy` command when substituting ${VAR} in the
+#     stack YAML. It is NOT the same as the .env used by docker-compose.
+#
+# Note on `with_registry_auth: true`:
+#   Required for Swarm to pull images from Docker Hub using the credentials
+#   passed during `docker login` on the manager node.
+# =============================================================================
+
+- name: Create app deploy directory on swarmnode
+  ansible.builtin.file:
+    path: "{{ app_deploy_dir }}"
+    state: directory
+    mode: '0755'
+
+# Copy the monitoring config directories from the repo to the remote node.
+# These are bind-mounted by loki, promtail, and grafana containers.
+# The `src` trailing slash means "copy contents of this dir" (rsync semantics).
+- name: Copy loki config directory to swarmnode
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../loki/"
+    dest: "{{ app_deploy_dir }}/loki/"
+    mode: '0644'
+
+- name: Copy promtail config directory to swarmnode
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../promtail/"
+    dest: "{{ app_deploy_dir }}/promtail/"
+    mode: '0644'
+
+- name: Copy grafana config directory to swarmnode
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../grafana/"
+    dest: "{{ app_deploy_dir }}/grafana/"
+    mode: '0644'
+
+# The stack YAML is also stored in the role's files/ directory so Ansible
+# can detect changes and trigger a redeploy via the handler.
+- name: Copy docker-stack.yml to swarmnode
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../docker-stack.yml"
+    dest: "{{ app_deploy_dir }}/docker-stack.yml"
+    mode: '0644'
+  notify: redeploy stack
+
+# Template the .env file with runtime values.
+# hostvars['dbserver']['private_ip'] resolves to the VPC private IP of
+# the DB server, ensuring web-to-DB traffic stays on the private network.
+- name: Write stack environment file
+  ansible.builtin.template:
+    src: stack-env.j2
+    dest: "{{ app_deploy_dir }}/.env"
+    mode: '0600'
+
+# Deploy or update the Swarm stack.
+# community.docker.docker_stack is idempotent — running it again with the
+# same stack YAML is a no-op unless the YAML changed.
+- name: Deploy Swarm stack
+  community.docker.docker_stack:
+    state: present
+    name: "{{ swarm_stack_name }}"
+    compose:
+      - "{{ app_deploy_dir }}/docker-stack.yml"
+    with_registry_auth: true

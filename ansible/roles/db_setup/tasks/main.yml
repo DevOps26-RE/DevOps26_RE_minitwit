@@ -1,0 +1,75 @@
+---
+# =============================================================================
+# Role: db_setup
+# Hosts: db_server (dbserver / Node 2)
+# Purpose: Deploy PostgreSQL via docker-compose on Node 2.
+# =============================================================================
+#
+# This role is extracted from the original docker_app role (lines 176-243)
+# with the `when: inventory_hostname == "dbserver"` guards removed since
+# this role is scoped to `hosts: db_server` in site.yml.
+#
+# IMPORTANT: PostgreSQL runs via docker-compose (NOT docker stack deploy).
+# The database is intentionally kept outside the Swarm stack because:
+#   1. Stateful services in Swarm require careful volume management —
+#      Swarm can reschedule containers to different nodes on failure,
+#      which would lose the database volume unless shared storage (NFS,
+#      Ceph, etc.) is configured. docker-compose on a fixed node avoids
+#      this complexity.
+#   2. The existing schema.sql, Dockerfile-db, and docker-compose-db.yaml
+#      already work. No migration of the database mechanism is needed.
+#   3. PostgreSQL is accessed by the web service via the private VPC IP:
+#        DB_ADDR=postgres://minitwit:minitwit@<NODE2_PRIVATE_IP>:5432/minitwit
+#      This is templated in swarm_stack_deploy/templates/stack-env.j2.
+# =============================================================================
+
+- name: Create DB directory
+  file:
+    path: "{{ db_deploy_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Create docker directory inside DB deploy dir
+  file:
+    path: "{{ db_deploy_dir }}/docker"
+    state: directory
+    mode: '0755'
+
+- name: Create db directory inside DB deploy dir
+  file:
+    path: "{{ db_deploy_dir }}/db"
+    state: directory
+    mode: '0755'
+
+- name: Copy docker-compose file to DB server
+  copy:
+    src: "{{ playbook_dir }}/../docker-compose-db.yaml"
+    dest: "{{ db_deploy_dir }}/"
+    owner: root
+    group: root
+    mode: '0755'
+  notify: restart db
+
+- name: Copy Dockerfile-db to DB server
+  copy:
+    src: "{{ playbook_dir }}/../docker/Dockerfile-db"
+    dest: "{{ db_deploy_dir }}/docker/Dockerfile-db"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Copy schema.sql to DB server
+  copy:
+    src: "{{ playbook_dir }}/../db/schema.sql"
+    dest: "{{ db_deploy_dir }}/db/schema.sql"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Start DB container
+  community.docker.docker_compose_v2:
+    project_src: "{{ db_deploy_dir }}"
+    files:
+      - docker-compose-db.yaml
+    state: present
+    build: always

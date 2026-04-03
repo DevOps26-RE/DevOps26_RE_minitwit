@@ -1,0 +1,59 @@
+---
+# =============================================================================
+# Role: swarm_labels
+# Hosts: swarm_managers (swarmnode)
+# Purpose: Assign Docker node labels used by docker-stack.yml placement
+#          constraints to control which services run on which nodes.
+# =============================================================================
+#
+# Labels are the mechanism Docker Swarm uses for placement constraints.
+# In docker-stack.yml, each service has a `deploy.placement.constraints`
+# block like:
+#   - node.labels.role == ingress
+#   - node.labels.role == monitoring
+#
+# Why labels instead of node.hostname constraints?
+#   Labels are more portable. If you replace a node (e.g. destroy and
+#   reprovision swarmnode), you just re-apply the label to the new node
+#   without editing docker-stack.yml. Hostname constraints tie the config
+#   to specific machine names.
+#
+# Labels assigned:
+#   swarmnode  → role=ingress     Traefik runs here initially (Phase 2/3)
+#   dbserver   → role=database    Reserved for future DB exporters
+#   webserver  → role=monitoring  prometheus, loki, promtail, grafana
+#
+# The `labels_state: merge` option ADDS the label without clearing
+# existing labels. This is important if you run the playbook again after
+# manually adding other labels to a node.
+#
+# Note on webserver label: webserver is not in the swarm during the
+# first provisioning run (it joins in Phase 3). The `ignore_errors: true`
+# on that task prevents the play from failing. Re-running the playbook
+# after Phase 3 will succeed and apply the label correctly.
+# =============================================================================
+
+- name: Label swarmnode as ingress
+  community.docker.docker_node:
+    hostname: swarmnode
+    labels:
+      role: ingress
+    labels_state: merge
+
+- name: Label dbserver as database
+  community.docker.docker_node:
+    hostname: dbserver
+    labels:
+      role: database
+    labels_state: merge
+
+# webserver is not in the swarm yet during initial provisioning.
+# ignore_errors: true prevents play failure; label will be applied
+# correctly when the full playbook is re-run after Phase 3.
+- name: Label webserver as monitoring
+  community.docker.docker_node:
+    hostname: webserver
+    labels:
+      role: monitoring
+    labels_state: merge
+  ignore_errors: true
