@@ -121,18 +121,6 @@
     password: "{{ DOCKERHUB_TOKEN }}"   # docker token for docker hub
   delegate_to: localhost   # runs on local machine
   become: false
-- name: Build DB image
-  community.docker.docker_image:
-    name: "{{DOCKERHUB_USERNAME}}/minitwit-db:latest"
-    build:
-      path: "{{ playbook_dir }}/../"
-      dockerfile: docker/Dockerfile-db
-    source: build
-    push: true
-  delegate_to: localhost  # builds and pushes from local machine
-  become: false
-  when: inventory_hostname == "dbserver"
-  no_log: true
 
 - name: Build APP image
   community.docker.docker_image:
@@ -180,13 +168,6 @@
   when: inventory_hostname == "dbserver"
   no_log: true
 
-- name: Create docker directory
-  file:
-    path: /opt/minitwit-db/docker
-    state: directory
-  when: inventory_hostname == "dbserver"
-  no_log: true
-
 - name: Create db directory
   file:
     path: /opt/minitwit-db/db
@@ -209,16 +190,6 @@
     mode: '0755'
   when: inventory_hostname == "dbserver"
   notify: restart db
-  no_log: true
-
-- name: Copy docker files to DB server
-  copy:
-    src: "{{ playbook_dir }}/../docker/Dockerfile-db"
-    dest: /opt/minitwit-db/docker/Dockerfile-db
-    owner: root
-    group: root
-    mode: '0755'
-  when: inventory_hostname == "dbserver"
   no_log: true
 
 - name: Copy Schema SQL to DB server
@@ -265,6 +236,42 @@
   notify: restart web
   no_log: true
 
+- name: Copy env file to Web server
+  copy:
+    content: |
+      DB_ADDR=10.114.0.3
+    dest: /opt/minitwit/.env
+    owner: root
+    group: root
+    mode: '0600'
+  when: inventory_hostname == "webserver"
+  no_log: true
+
+- name: Create monitoring config directories
+  file:
+    path: /opt/minitwit/{{ item }}
+    state: directory
+    mode: '0755'
+  loop:
+    - loki
+    - promtail
+    - grafana
+  when: inventory_hostname == "webserver"
+  no_log: true
+
+- name: Copy monitoring config files to Web server
+  copy:
+    src: "{{ playbook_dir }}/../{{ item.src }}"
+    dest: /opt/minitwit/{{ item.dest }}
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - { src: "loki/loki-config.yaml", dest: "loki/loki-config.yaml" }
+    - { src: "promtail/promtail-config.yaml", dest: "promtail/promtail-config.yaml" }
+    - { src: "grafana/datasources.yaml", dest: "grafana/datasources.yaml" }
+  when: inventory_hostname == "webserver"
+  no_log: true
 - name: Start Web container
   community.docker.docker_compose_v2:
     project_src: /opt/minitwit
