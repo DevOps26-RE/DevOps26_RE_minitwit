@@ -44,9 +44,10 @@ __pychache__/
 *.pyo
 *.pyd
 
-
 # Jupyter Notebook checkpoints
 .DS_Store
 .claude
 _claude-resume.sh
 CLAUDE.md
+
+echo "db_ip.txt" >> .gitignore

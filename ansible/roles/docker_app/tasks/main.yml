@@ -19,6 +19,7 @@
     done
   changed_when: false
   no_log: true
+
 - name: Fix interrupted dpkg
   command: dpkg --configure -a
   ignore_errors: true
@@ -117,34 +118,23 @@
 
 - name: Log in to Docker Hub
   community.docker.docker_login:
-    username: "{{ DOCKERHUB_USERNAME }}"  # username for dockerhub
-    password: "{{ DOCKERHUB_TOKEN }}"   # docker token for docker hub
-  delegate_to: localhost   # runs on local machine
+    username: "{{ DOCKERHUB_USERNAME }}"
+    password: "{{ DOCKERHUB_TOKEN }}"
+  delegate_to: localhost
   become: false
-- name: Build DB image
-  community.docker.docker_image:
-    name: "{{DOCKERHUB_USERNAME}}/minitwit-db:latest"
-    build:
-      path: "{{ playbook_dir }}/../"
-      dockerfile: docker/Dockerfile-db
-    source: build
-    push: true
-  delegate_to: localhost  # builds and pushes from local machine
-  become: false
-  when: inventory_hostname == "dbserver"
-  no_log: true
 
 - name: Build APP image
   community.docker.docker_image:
-    name: "{{DOCKERHUB_USERNAME}}/minitwit:latest"
+    name: "{{ DOCKERHUB_USERNAME }}/minitwit:latest"
     build:
       path: "{{ playbook_dir }}/../"
       dockerfile: docker/Dockerfile-app
+      platform: linux/amd64
       args:
         GO_VERSION: "1.25.0"
     source: build
     push: true
-  delegate_to: localhost  # builds and pushes from local machine
+  delegate_to: localhost
   become: false
   when: inventory_hostname == "webserver"
   no_log: true
@@ -180,41 +170,17 @@
   when: inventory_hostname == "dbserver"
   no_log: true
 
-- name: Create docker directory
-  file:
-    path: /opt/minitwit-db/docker
-    state: directory
-  when: inventory_hostname == "dbserver"
-  no_log: true
-
-- name: Create db directory
+- name: Create db init directory
   file:
     path: /opt/minitwit-db/db
     state: directory
   when: inventory_hostname == "dbserver"
   no_log: true
 
-# - name: Pull project from Git
-#   git:
-#     repo: https://github.com/yourrepo/minitwit.git
-#     dest: /opt/minitwit
-#     version: main
-
 - name: Copy docker compose file to DB server
   copy:
     src: "{{ playbook_dir }}/../docker-compose-db.yaml"
     dest: /opt/minitwit-db/
-    owner: root
-    group: root
-    mode: '0755'
-  when: inventory_hostname == "dbserver"
-  notify: restart db
-  no_log: true
-
-- name: Copy docker files to DB server
-  copy:
-    src: "{{ playbook_dir }}/../docker/Dockerfile-db"
-    dest: /opt/minitwit-db/docker/Dockerfile-db
     owner: root
     group: root
     mode: '0755'
@@ -231,14 +197,12 @@
   when: inventory_hostname == "dbserver"
   no_log: true
 
-
 - name: Start DB container
   community.docker.docker_compose_v2:
     project_src: /opt/minitwit-db
     files:
       - docker-compose-db.yaml
     state: present
-    build: always
   when: inventory_hostname == "dbserver"
   no_log: true
 
@@ -263,6 +227,43 @@
     mode: '0755'
   when: inventory_hostname == "webserver"
   notify: restart web
+  no_log: true
+
+- name: Copy env file to Web server
+  copy:
+    content: |
+      DB_ADDR={{ ansible_host | default(lookup('file', playbook_dir + '/../db_ip.txt') | trim) }}
+    dest: /opt/minitwit/.env
+    owner: root
+    group: root
+    mode: '0600'
+  when: inventory_hostname == "webserver"
+  no_log: true
+
+- name: Create monitoring config directories
+  file:
+    path: /opt/minitwit/{{ item }}
+    state: directory
+    mode: '0755'
+  loop:
+    - loki
+    - promtail
+    - grafana
+  when: inventory_hostname == "webserver"
+  no_log: true
+
+- name: Copy monitoring config files to Web server
+  copy:
+    src: "{{ playbook_dir }}/../{{ item.src }}"
+    dest: /opt/minitwit/{{ item.dest }}
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - { src: "loki/loki-config.yaml", dest: "loki/loki-config.yaml" }
+    - { src: "promtail/promtail-config.yaml", dest: "promtail/promtail-config.yaml" }
+    - { src: "grafana/datasources.yaml", dest: "grafana/datasources.yaml" }
+  when: inventory_hostname == "webserver"
   no_log: true
 
 - name: Start Web container
