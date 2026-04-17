@@ -3,6 +3,15 @@
 
 #$ip_file = "db_ip.txt"
 
+# Load .env file if it exists
+if File.exist?('.env')
+  File.foreach('.env') do |line|
+    next if line.strip.empty? || line.start_with?('#')
+    key, value = line.strip.split('=', 2)
+    ENV[key] = value
+  end
+end
+
 Vagrant.configure("2") do |config|
   config.vm.box = 'digital_ocean'
   config.vm.box_url = "https://github.com/devopsgroup-io/vagrant-digitalocean/raw/master/box/digital_ocean.box"
@@ -10,9 +19,9 @@ Vagrant.configure("2") do |config|
   # Sync project folder
   config.vm.synced_folder ".", "/vagrant", type: "rsync"
 
-  # --- Database Server with Docker ---
-  config.vm.define "dbserver" do |db|
-    db.vm.provider :digital_ocean do |provider|
+  # --- Manager 1 ---
+  config.vm.define "manager1" do |m|
+    m.vm.provider :digital_ocean do |provider|
       provider.ssh_key_name = ENV["SSH_KEY_NAME"]
       provider.token        = ENV["DIGITAL_OCEAN_TOKEN"]
       provider.image        = 'ubuntu-22-04-x64'
@@ -20,14 +29,12 @@ Vagrant.configure("2") do |config|
       provider.size         = 's-1vcpu-1gb'
       provider.privatenetworking = true
     end
+    m.vm.hostname = "manager1"
+  end
 
-    db.vm.hostname = "dbserver"
-  end 
-
-  # --- Web Server with Doscker ---
-  config.vm.define "webserver" do |web|
-    
-    web.vm.provider :digital_ocean do |provider|
+  # --- Manager 2 ---
+  config.vm.define "manager2" do |m|
+    m.vm.provider :digital_ocean do |provider|
       provider.ssh_key_name = ENV["SSH_KEY_NAME"]
       provider.token        = ENV["DIGITAL_OCEAN_TOKEN"]
       provider.image        = 'ubuntu-22-04-x64'
@@ -35,14 +42,26 @@ Vagrant.configure("2") do |config|
       provider.size         = 's-1vcpu-1gb'
       provider.privatenetworking = true
     end
+    m.vm.hostname = "manager2"
+  end
 
-    web.vm.hostname = "webserver"
+  # --- Swarm Leader (defined last so Ansible runs after all nodes are up) ---
+  config.vm.define "leader_swarm" do |leader|
+    leader.vm.provider :digital_ocean do |provider|
+      provider.ssh_key_name = ENV["SSH_KEY_NAME"]
+      provider.token        = ENV["DIGITAL_OCEAN_TOKEN"]
+      provider.image        = 'ubuntu-22-04-x64'
+      provider.region       = 'fra1'
+      provider.size         = 's-2vcpu-2gb'
+      provider.privatenetworking = true
+    end
+    leader.vm.hostname = "leader"
 
-    # Ansible runs ONCE here after both VMs are up
-    web.vm.provision "ansible" do |ansible|
-      ansible.playbook       = "ansible/site.yml"
-      ansible.limit          = "all"
-      ansible.verbose        = "v"
+    # Ansible runs ONCE here after all VMs are up
+    leader.vm.provision "ansible" do |ansible|
+      ansible.playbook = "ansible/site.yml"
+      ansible.limit    = "all"
+      ansible.verbose  = "v"
     end
   end
 end
