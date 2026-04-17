@@ -63,6 +63,14 @@ type Follower struct {
 
 func (Follower) TableName() string { return "follower" }
 
+type ApplicationState struct {
+	Key   string `gorm:"column:key;primaryKey"`
+	Value int    `gorm:"column:value"`
+}
+
+func (ApplicationState) TableName() string { return "application_state" }
+
+
 func main() {
 	err := init_db()
 	if err != nil {

@@ -20,3 +20,12 @@ create table messages (
   pub_date integer,
   flagged integer
 );
+
+drop table if exists application_state;
+create table application_state (
+  key text primary key,
+  value integer not null
+);
+
+insert into application_state (key, value) values ('latest_id', -1);
+
