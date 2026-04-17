@@ -23,7 +23,6 @@ import (
 
 const (
 	PER_PAGE         int    = 30
-	SECRET_KEY       string = "development key"
 	RouteRegister    string = "/register"
 	RoutePublic      string = "/public"
 	RouteLogin       string = "/login"
@@ -34,7 +33,17 @@ const (
 	ErrSaveSession   string = "failed to save session: %v"
 )
 
-var db *gorm.DB
+var (
+	db         *gorm.DB
+	SECRET_KEY string
+)
+
+func init() {
+	SECRET_KEY = os.Getenv("SECRET_KEY")
+	if SECRET_KEY == "" {
+		SECRET_KEY = "development key"
+	}
+}
 
 type User struct {
 	UserID   int    `gorm:"column:user_id;primaryKey;autoIncrement"`
