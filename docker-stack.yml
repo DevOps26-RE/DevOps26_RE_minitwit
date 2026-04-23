@@ -122,6 +122,14 @@ services:
   # ---------------------------------------------------------------------------
   web:
     image: ${DOCKER_IMAGE:-runtimeerroritu/minitwit:latest}
+    user: "65532" #Enforces the UID (not GID) to match the Dckerfile of the app. Right now it uses Chainguards glibc-dynamic container that executes as UID 65532 by default: https://images.chainguard.dev/directory/image/glibc-dynamic/specifications
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     environment:
       # DB_ADDR uses Node 2's VPC private IP (set in .env by Ansible).
       DB_ADDR: ${DB_ADDR}
