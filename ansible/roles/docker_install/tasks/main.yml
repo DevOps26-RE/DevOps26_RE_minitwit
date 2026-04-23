@@ -1,0 +1,77 @@
+---
+- name: Wait for apt lock to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "Waiting for apt lock..."
+      sleep 5
+    done
+  changed_when: false
+  no_log: true
+
+- name: Wait for unattended upgrades to finish
+  shell: |
+    while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+      echo "Waiting for apt lists lock..."
+      sleep 5
+    done
+  changed_when: false
+  no_log: true
+
+- name: Fix interrupted dpkg
+  command: dpkg --configure -a
+  ignore_errors: true
+  no_log: true
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+    lock_timeout: 120
+  no_log: true
+
+- name: Remove conflicting Docker packages
+  apt:
+    name:
+      - containerd
+      - containerd.io
+      - docker
+      - docker-engine
+      - docker.io
+      - runc
+    state: absent
+    purge: true
+  ignore_errors: true
+  no_log: true
+
+- name: Install Docker and dependencies
+  apt:
+    name:
+      - docker.io
+      - containerd
+      - python3-pip
+    state: present
+    lock_timeout: 120
+  no_log: true
+
+- name: Install Docker Python SDK
+  pip:
+    name: docker
+  no_log: true
+
+- name: Create docker cli-plugins directory
+  file:
+    path: /usr/libexec/docker/cli-plugins
+    state: directory
+    mode: '0755'
+
+- name: Install Docker Compose plugin
+  get_url:
+    url: https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64
+    dest: /usr/libexec/docker/cli-plugins/docker-compose
+    mode: '0755'
+
+- name: Start and enable Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: true
+    daemon_reload: true

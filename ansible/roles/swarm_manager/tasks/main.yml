@@ -1,0 +1,26 @@
+---
+- name: Check if swarm is already initialized
+  command: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+  register: swarm_state
+  changed_when: false
+
+- name: Detect private VPC IP
+  set_fact:
+    swarm_private_ip: "{{ ansible_all_ipv4_addresses | reject('equalto', ansible_host) | first }}"
+
+- name: Initialize Docker Swarm
+  command: docker swarm init --advertise-addr {{ swarm_private_ip }}
+  when: swarm_state.stdout != "active"
+
+- name: Get swarm worker join token
+  command: docker swarm join-token -q worker
+  register: swarm_worker_token
+  changed_when: false
+
+- name: Store join token as a fact for workers to use
+  set_fact:
+    swarm_join_token: "{{ swarm_worker_token.stdout }}"
+    swarm_manager_addr: "{{ swarm_private_ip }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  loop: "{{ groups['workers'] }}"

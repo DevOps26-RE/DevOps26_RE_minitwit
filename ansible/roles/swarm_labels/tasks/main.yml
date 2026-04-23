@@ -1,0 +1,20 @@
+---
+- name: Get manager node ID
+  command: docker node ls --filter role=manager --format '{{ "{{" }}.ID{{ "}}" }}'
+  register: manager_node_id
+  changed_when: false
+
+- name: Label manager as ingress
+  command: docker node update --label-add role=ingress {{ manager_node_id.stdout }}
+  changed_when: true
+
+- name: Get worker node IDs and hostnames
+  command: docker node ls --filter role=worker --format '{{ "{{" }}.Hostname{{ "}}" }}'
+  register: worker_hostnames
+  changed_when: false
+
+- name: Label swarm-monitoring node as monitoring
+  command: docker node update --label-add role=monitoring {{ item }}
+  loop: "{{ worker_hostnames.stdout_lines }}"
+  when: "'monitoring' in item"
+  changed_when: true

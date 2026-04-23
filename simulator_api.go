@@ -133,7 +133,6 @@ func post_messages_per_user(c *gin.Context) {
 		return
 	}
 
-
 	c.Status(http.StatusNoContent)
 }
 

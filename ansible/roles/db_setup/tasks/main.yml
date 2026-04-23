@@ -1,0 +1,31 @@
+---
+- name: Create DB directory
+  file:
+    path: /opt/minitwit-db
+    state: directory
+    mode: '0755'
+
+- name: Create db subdirectory for schema
+  file:
+    path: /opt/minitwit-db/db
+    state: directory
+    mode: '0755'
+
+- name: Copy docker-compose-db.yaml
+  copy:
+    src: "{{ playbook_dir }}/../docker-compose-db.yaml"
+    dest: /opt/minitwit-db/docker-compose-db.yaml
+    mode: '0644'
+
+- name: Copy schema SQL
+  copy:
+    src: "{{ playbook_dir }}/../db/schema.sql"
+    dest: /opt/minitwit-db/db/schema.sql
+    mode: '0644'
+
+- name: Start PostgreSQL via docker compose
+  community.docker.docker_compose_v2:
+    project_src: /opt/minitwit-db
+    files:
+      - docker-compose-db.yaml
+    state: present

@@ -1,6 +1,35 @@
+---
+# Play 1: Install Docker on all nodes
 - hosts: all
   become: true
-  vars_files:
-    - credentials.yml   # to be removed later
   roles:
-    - docker_app
+    - docker_install
+
+# Play 2: Bootstrap Docker Swarm (manager first, then workers join)
+- hosts: manager
+  become: true
+  roles:
+    - swarm_manager
+
+- hosts: workers
+  become: true
+  roles:
+    - swarm_worker
+
+# Play 3: Label swarm nodes
+- hosts: manager
+  become: true
+  roles:
+    - swarm_labels
+
+# Play 4: Start PostgreSQL on DB node
+- hosts: db
+  become: true
+  roles:
+    - db_setup
+
+# Play 5: Deploy the swarm stack
+- hosts: manager
+  become: true
+  roles:
+    - stack_deploy

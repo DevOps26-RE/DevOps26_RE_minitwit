@@ -1,0 +1,54 @@
+---
+- name: Create application directory
+  file:
+    path: /opt/minitwit
+    state: directory
+    mode: '0755'
+
+- name: Create minitwit_deploy directory for Docker configs
+  file:
+    path: /opt/minitwit/minitwit_deploy
+    state: directory
+    mode: '0755'
+
+- name: Copy docker-stack.yml
+  copy:
+    src: "{{ playbook_dir }}/../docker-stack.yml"
+    dest: /opt/minitwit/docker-stack.yml
+    mode: '0644'
+
+- name: Copy Prometheus config
+  copy:
+    src: "{{ playbook_dir }}/../prometheus/prometheus.yml"
+    dest: /opt/minitwit/minitwit_deploy/prometheus.yml
+    mode: '0644'
+
+- name: Copy Loki config
+  copy:
+    src: "{{ playbook_dir }}/../loki/loki-config.yaml"
+    dest: /opt/minitwit/minitwit_deploy/loki-config.yaml
+    mode: '0644'
+
+- name: Copy Promtail config
+  copy:
+    src: "{{ playbook_dir }}/../promtail/promtail-config.yaml"
+    dest: /opt/minitwit/minitwit_deploy/promtail-config.yaml
+    mode: '0644'
+
+- name: Copy Grafana datasources config
+  copy:
+    src: "{{ playbook_dir }}/../grafana/datasources.yaml"
+    dest: /opt/minitwit/minitwit_deploy/datasources.yaml
+    mode: '0644'
+
+- name: Deploy Docker stack
+  command: >
+    docker stack deploy
+    -c /opt/minitwit/docker-stack.yml
+    minitwit
+  environment:
+    DOCKER_IMAGE: "{{ docker_image | default('runtimeerroritu/minitwit:latest') }}"
+    PROM_IMAGE: "{{ prom_image | default('runtimeerroritu/minitwit-prometheus:latest') }}"
+    DB_ADDR: "{{ db_addr | default('10.114.0.2') }}"
+    GRAFANA_URL: "{{ grafana_url | default('https://runtimetwiterror.dev/grafana/') }}"
+  changed_when: true

@@ -1,0 +1,12 @@
+---
+- name: Check if already part of a swarm
+  command: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+  register: swarm_state
+  changed_when: false
+
+- name: Join swarm as worker
+  command: >
+    docker swarm join
+    --token {{ swarm_join_token }}
+    {{ swarm_manager_addr }}:2377
+  when: swarm_state.stdout != "active"
