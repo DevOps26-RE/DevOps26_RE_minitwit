@@ -82,12 +82,17 @@ services:
   #     mode: global        # runs one instance on EVERY node
   # and remove placement constraints. Also change port mode to `ingress`
   # if you want Swarm's built-in load balancing.
-  traefik:
+traefik:
     image: traefik:v3.6
+    read_only: true #Dont allow to write to anything but what is explicitly specified
+    cap_drop: #limit capabilities to none
+      - ALL
+    security_opt: #Prevent escalation of privileges
+      - no-new-privileges:true
+    tmpfs: #Assign a scratch pad for the service to use for tmp files
+      - /tmp
     command:
       - "--providers.docker=true"
-      # swarmMode=true: read service labels instead of container labels.
-      # Without this Traefik ignores all traefik.* labels on swarm services.
       - "--providers.docker.swarmMode=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:5001"
@@ -96,9 +101,6 @@ services:
       - target: 5001
         published: 5001
         protocol: tcp
-        # mode: host binds directly to the host NIC. Required during
-        # Phase 2/3 so the iptables DNAT rule works predictably.
-        # Change to `mode: ingress` in Phase 4 for full routing mesh.
         mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -109,8 +111,6 @@ services:
       replicas: 1
       placement:
         constraints:
-          # Pins Traefik to Node 3 (swarmnode) during Phase 2 and Phase 3.
-          # Remove this constraint in Phase 4 and change mode to `global`.
           - node.labels.role == ingress
       restart_policy:
         condition: on-failure
@@ -236,13 +236,18 @@ services:
   # In a full Swarm setup you'd run Promtail as `mode: global` on every
   # node to capture logs from all nodes, but that requires a Loki setup
   # that accepts multi-node writes. For now, single-node is sufficient.
-  promtail:
+promtail:
     image: grafana/promtail:3.6.0
+    read_only: true #Dont allow to write to anything but what is explicitly specified
+    cap_drop: #limit capabilities to none
+      - ALL
+    security_opt: #Prevent escalation of privileges
+      - no-new-privileges:true
+    tmpfs: #Assign a scratch pad for the service to use for tmp files
+      - /tmp
     command: -config.file=/etc/promtail/promtail-config.yaml
     volumes:
       - /opt/minitwit/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
-      # Docker socket: allows Promtail to discover container log paths.
-      # Must match the node where this container is scheduled.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - overlay_net
