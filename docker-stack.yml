@@ -167,6 +167,15 @@ services:
   # ---------------------------------------------------------------------------
   prometheus:
     image: ${PROM_IMAGE:-runtimeerroritu/minitwit-prometheus:latest}
+    user: "nobody" #Matching UID with what the container uses
+    read_only: true #Dont allow to write to anything but what is explicitly specified
+    cap_drop: #limit capabilities to none
+      - ALL
+    security_opt: #Prevent escalation of privileges
+      - no-new-privileges:true
+    tmpfs: #Assign a scratch pad for the sevie to use to tmp files
+      - /tmp
+
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--web.external-url=${PROM_URL:-http://localhost:5001/prometheus}"
@@ -196,6 +205,15 @@ services:
   # Not exposed externally. Promtail pushes logs to it; Grafana queries it.
   loki:
     image: grafana/loki:3.7.0
+    user: "10001" #Matching UID with what the container uses
+    read_only: true #Dont allow to write to anything but what is explicitly specified
+    cap_drop: #limit capabilities to none
+      - ALL
+    security_opt: #Prevent escalation of privileges
+      - no-new-privileges:true
+    tmpfs: #Assign a scratch pad for the sevie to use to tmp files
+      - /tmp
+
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
       # Bind mount: config file must exist on the node where this container runs.
@@ -238,6 +256,14 @@ services:
   # ---------------------------------------------------------------------------
   grafana:
     image: grafana/grafana:latest
+    user: "472" #Matching UID with what the container uses
+    read_only: true #Dont allow to write to anything but what is explicitly specified
+    cap_drop: #limit capabilities to none
+      - ALL
+    security_opt: #Prevent escalation of privileges
+      - no-new-privileges:true
+    tmpfs: #Assign a scratch pad for the sevie to use to tmp files
+      - /tmp
     environment:
       - GF_SERVER_ROOT_URL=${GRAFANA_URL:-%(protocol)s://%(domain)s:%(http_port)s/grafana/}
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
