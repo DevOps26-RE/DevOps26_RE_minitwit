@@ -32,7 +32,7 @@ jobs:
           gofumpt -l -w .
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet || git commit -am "style: auto-fix gofumpt formatting" && git push
+          git diff --quiet || git commit -am "style: auto-fix gofumpt formatting" && git push origin HEAD:${{ github.head_ref || github.ref_name }}
       # golang static tool for go
       - name: golangci-lint
         uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # v6.1.1
