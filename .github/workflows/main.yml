@@ -30,7 +30,9 @@ jobs:
         run: |
           go install mvdan.cc/gofumpt@latest
           gofumpt -l -w .
-      # TODO: Add auto-fix here
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet || git commit -am "style: auto-fix gofumpt formatting" && git push
       # golang static tool for go
       - name: golangci-lint
         uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # v6.1.1
@@ -155,7 +157,7 @@ jobs:
           host: ${{ github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE }}
           username: ${{ secrets.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          source: "docker-compose-app.yaml,loki,promtail,grafana"
+          source: "docker-stack.yml,loki,promtail,grafana"
           target: "/opt/minitwit"
           overwrite: true
 
@@ -180,6 +182,5 @@ jobs:
             echo "DB_ADDR=${DB_ADDR}" >> .env
             echo "PROM_URL=${PROM_URL}" >> .env
             echo "GRAFANA_URL=${GRAFANA_URL}" >> .env
-            docker compose -f docker-compose-app.yaml pull
-            docker compose -f docker-compose-app.yaml up -d
+            docker stack deploy -c docker-compose-app.yaml minitwit --with-registry-auth
             docker image prune -f
