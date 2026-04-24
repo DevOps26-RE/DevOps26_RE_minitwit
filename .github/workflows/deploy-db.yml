@@ -1,0 +1,38 @@
+name: Deploy DB Changes to Droplet
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'db/schema.sql'
+      - '.github/workflows/deploy-db.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DB_SSH_KEY }}" > ~/.ssh/db_key
+          chmod 600 ~/.ssh/db_key
+          ssh-keyscan -H ${{ secrets.DB_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy Schema to Database
+        run: |
+          ssh -i ~/.ssh/db_key ${{ secrets.DB_USER }}@${{ secrets.DB_HOST }} << 'EOSSH'
+          set -e
+          echo "Pulling latest code..."
+          cd /root && git pull origin main || git clone https://github.com/DevOps26-RE/DevOps26_RE_minitwit.git
+          echo "Applying schema changes..."
+          PGPASSWORD="minitwit" psql -U minitwit -d minitwit -h localhost -f /root/db/schema.sql
+          echo "Schema update complete!"
+          EOSSH
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/db_key
