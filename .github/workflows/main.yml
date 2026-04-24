@@ -147,7 +147,6 @@ jobs:
             });
   deploy:
     needs: build-and-push
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -155,7 +154,7 @@ jobs:
       - name: Copy files to server
         uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
         with:
-          host: ${{ secrets.DO_HOST }}
+          host: ${{github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE}}
           username: ${{ secrets.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
           source: "docker-stack.yml,loki,promtail,grafana"
@@ -168,15 +167,12 @@ jobs:
           DB_ADDR: ${{ github.ref == 'refs/heads/main' && secrets.DO_DB || secrets.DO_DB_STAGE }}
           DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit:${{ needs.build-and-push.outputs.image_tag }}
           PROM_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit-prometheus:${{ needs.build-and-push.outputs.image_tag }}
-          # DOMAIN: ${{ secrets.DO_HOST }}
-          # MANAGER1_IP: ${{ secrets.DO_MANAGER1_IP }}
-          # MANAGER2_IP: ${{ secrets.DO_MANAGER2_IP }}
           PROM_URL: ${{ format('http://{0}.com:5001/prometheus', github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE) }}
           GRAFANA_URL: ${{ format('http://{0}.com:5001/grafana/', github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE) }}
         with:
           host: ${{ github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE }}
           username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_SSH_KEY }}
+          key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
           envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,PROM_URL,GRAFANA_URL
           script: |
             cd /opt/minitwit
