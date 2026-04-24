@@ -157,8 +157,8 @@ jobs:
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_SSH_KEY }}
-          source: "docker-stack.yml,loki,promtail,grafana,prometheus"
+          key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
+          source: "docker-stack.yml,loki,promtail,grafana"
           target: "/opt/minitwit"
           overwrite: true
 
