@@ -6,33 +6,42 @@ on:
       - main
     paths:
       - 'db/schema.sql'
+      - 'docker-compose-db.yaml'
       - '.github/workflows/deploy-db.yml'
 
 jobs:
-  deploy:
+  deploy-db:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DB_SSH_KEY }}" > ~/.ssh/db_key
-          chmod 600 ~/.ssh/db_key
-          ssh-keyscan -H ${{ secrets.DB_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Copy files to DB Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DB_HOST }}
+          username: ${{ secrets.DB_USER }}
+          key: ${{ secrets.DB_SSH_KEY }}
+          # This copies your compose file and the entire db folder (with schema.sql)
+          source: "docker-compose-db.yaml,db"
+          target: "/root"
+          overwrite: true
 
-      - name: Deploy Schema to Database
-        run: |
-          ssh -i ~/.ssh/db_key ${{ secrets.DB_USER }}@${{ secrets.DB_HOST }} << 'EOSSH'
-          set -e
-          echo "Pulling latest code..."
-          cd /root && git pull origin main || git clone https://github.com/DevOps26-RE/DevOps26_RE_minitwit.git
-          echo "Applying schema changes..."
-          PGPASSWORD="minitwit" psql -U minitwit -d minitwit -h localhost -f /root/db/schema.sql
-          echo "Schema update complete!"
-          EOSSH
-
-      - name: Cleanup
-        if: always()
-        run: rm -f ~/.ssh/db_key
+      - name: Update Database and Schema via SSH
+        uses: appleboy/ssh-action@v1.2.1
+        with:
+          host: ${{ secrets.DB_HOST }}
+          username: ${{ secrets.DB_USER }}
+          key: ${{ secrets.DB_SSH_KEY }}
+          script: |
+            cd /root
+            
+            echo "Updating Docker container configuration..."
+            # This will only restart the DB if the docker-compose-db.yaml changed
+            docker compose -f docker-compose-db.yaml up -d
+            
+            echo "Applying schema changes inside the container..."
+            # We pipe the local schema.sql file into the running docker container
+            cat db/schema.sql | docker exec -i root-db-1 psql -U minitwit -d minitwit
+            
+            echo "DB Deployment Successful"
