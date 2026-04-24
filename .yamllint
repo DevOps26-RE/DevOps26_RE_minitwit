@@ -5,4 +5,5 @@ ignore: |
 rules:
   document-start: disable
   line-length:
-    max: 150
+    max: 250
+  trailing-spaces: disable

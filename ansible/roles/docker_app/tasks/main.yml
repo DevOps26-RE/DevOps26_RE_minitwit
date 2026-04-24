@@ -310,10 +310,10 @@
     dest: "/opt/minitwit/minitwit_deploy/{{ item.dest }}"
     mode: '0644'
   loop:
-    - { src: "{{ playbook_dir }}/../prometheus/prometheus.yml", dest: "prometheus.yml" }
-    - { src: "{{ playbook_dir }}/../loki/loki-config.yaml", dest: "loki-config.yaml" }
-    - { src: "{{ playbook_dir }}/../promtail/promtail-config.yaml", dest: "promtail-config.yaml" }
-    - { src: "{{ playbook_dir }}/../grafana/datasources.yaml", dest: "datasources.yaml" }
+    - {src: "{{ playbook_dir }}/../prometheus/prometheus.yml", dest: "prometheus.yml"}
+    - {src: "{{ playbook_dir }}/../loki/loki-config.yaml", dest: "loki-config.yaml"}
+    - {src: "{{ playbook_dir }}/../promtail/promtail-config.yaml", dest: "promtail-config.yaml"}
+    - {src: "{{ playbook_dir }}/../grafana/datasources.yaml", dest: "datasources.yaml"}
   when: inventory_hostname in groups['swarm_leaders']
 
 - name: Deploy stack to swarm
