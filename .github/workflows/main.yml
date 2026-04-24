@@ -147,40 +147,47 @@ jobs:
             });
   deploy:
     needs: build-and-push
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Copy docker-compose file to server
+      - name: Copy files to server
         uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
         with:
-          host: ${{ github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE }}
+          host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
-          key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          source: "docker-stack.yml,loki,promtail,grafana"
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "docker-stack.yml,loki,promtail,grafana,prometheus"
           target: "/opt/minitwit"
           overwrite: true
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@8faa84277b88b6cd1455986f459aa66cf72bc8a3 # v1.2.1
         env:
-          DB_ADDR: ${{ github.ref == 'refs/heads/main' && secrets.DO_DB || secrets.DO_DB_STAGE }}
+          DB_ADDR: ${{ secrets.DO_DB }}
           DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit:${{ needs.build-and-push.outputs.image_tag }}
           PROM_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/minitwit-prometheus:${{ needs.build-and-push.outputs.image_tag }}
-          PROM_URL: ${{ format('http://{0}.com:5001/prometheus', github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE) }}
-          GRAFANA_URL: ${{ format('http://{0}.com:5001/grafana/', github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE) }}
+          DOMAIN: ${{ secrets.DO_HOST }}
+          MANAGER1_IP: ${{ secrets.DO_MANAGER1_IP }}
+          MANAGER2_IP: ${{ secrets.DO_MANAGER2_IP }}
+          PROM_URL: ${{ format('https://{0}/prometheus', secrets.DO_HOST) }}
+          GRAFANA_URL: ${{ format('https://{0}/grafana/', secrets.DO_HOST) }}
         with:
-          host: ${{ github.ref == 'refs/heads/main' && secrets.DO_HOST || secrets.DO_HOST_STAGE }}
+          host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
-          key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,PROM_URL,GRAFANA_URL
+          key: ${{ secrets.DO_SSH_KEY }}
+          envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
           script: |
             cd /opt/minitwit
             echo "DOCKER_IMAGE=${DOCKER_IMAGE}" > .env
-            # Write the PROM_IMAGE variable into the .env file on the server
             echo "PROM_IMAGE=${PROM_IMAGE}" >> .env
             echo "DB_ADDR=${DB_ADDR}" >> .env
+            echo "DOMAIN=${DOMAIN}" >> .env
+            echo "MANAGER1_IP=${MANAGER1_IP}" >> .env
+            echo "MANAGER2_IP=${MANAGER2_IP}" >> .env
             echo "PROM_URL=${PROM_URL}" >> .env
             echo "GRAFANA_URL=${GRAFANA_URL}" >> .env
-            docker stack deploy -c docker-compose-app.yaml minitwit --with-registry-auth
+            export $(cat .env | xargs)
+            docker stack deploy -c docker-stack.yml minitwit --with-registry-auth
             docker image prune -f
