@@ -181,5 +181,5 @@ jobs:
           envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
           script: |
             cd /opt/minitwit
-            docker stack deploy -c docker-stack.yml minitwit --with-registry-auth
-            docker image prune -f
+            docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
+            docker image prune -af --filter "until=24h"
