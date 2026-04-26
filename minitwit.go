@@ -172,7 +172,25 @@ func connect_db() (*gorm.DB, error) {
 func init_db() error {
 	var err error
 	db, err = connect_db()
-	return err
+	if err != nil {
+		return err
+	}
+
+	// GORM AutoMigrate will handle Create Table if table not exist and Alter Table if new columns are added
+	err = db.AutoMigrate(&User{}, &Message{}, &Follower{}, &ApplicationState{})
+	if err != nil {
+		log.Printf("AutoMigrate failed: %v", err)
+		return err
+	}
+
+	var count int64
+	db.Model(&ApplicationState{}).Where("key = ?", "latest_id").Count(&count)
+	if count == 0 {
+		db.Create(&ApplicationState{Key: "latest_id", Value: -1})
+		log.Println("Initialized application_state with latest_id = -1")
+	}
+
+	return nil
 }
 
 func get_user_id(username string) (int, error) {
