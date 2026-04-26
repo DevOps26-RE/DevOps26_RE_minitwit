@@ -1,0 +1,191 @@
+version: '3.8'
+
+networks:
+  app-net:
+    driver: overlay
+
+# ==========================================
+# Declare Docker Configs
+# ==========================================
+configs:
+  prometheus_config:
+    file: ./minitwit_deploy/prometheus.yml
+  loki_config:
+    file: ./minitwit_deploy/loki-config.yaml
+  promtail_config:
+    file: ./minitwit_deploy/promtail-config.yaml
+  grafana_datasources:
+    file: ./minitwit_deploy/datasources.yaml
+
+services:
+  traefik:
+    image: traefik:v3.6
+    command:
+      - "--log.level=DEBUG"
+      - "--accesslog=true"
+      - "--providers.swarm=true"
+      - "--providers.swarm.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=aile@itu.dk"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--providers.swarm.network=app-net"
+    ports:
+      - target: 80
+        published: 80
+        mode: ingress
+      - target: 443
+        published: 443
+        mode: ingress
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt_data:/letsencrypt"
+    networks:
+      - app-net
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.role == ingress
+
+  web:
+    image: ${DOCKER_IMAGE:-runtimeerroritu/minitwit:latest}
+    environment:
+      #DB_ADDR: "10.114.0.6" # Jakubs DO private ip
+      #DB_ADDR: "10.114.0.2"
+      DB_ADDR: "${DB_ADDR}"
+    networks:
+      - app-net
+    deploy:
+      replicas: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 5s
+      placement:
+        constraints:
+          - node.labels.role == ingress
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.myweb.entrypoints=websecure"
+        - "traefik.http.routers.myweb.tls=true"
+        - "traefik.http.routers.myweb.tls.certresolver=myresolver"
+        #- "traefik.http.routers.myweb.rule=Host(`runtimetwiterror.dev`)"
+        - "traefik.http.routers.myweb.rule=Host(`${DOMAIN}`)"
+        - "traefik.http.services.myweb.loadbalancer.server.port=5001"
+        - "traefik.docker.network=app-net"
+        - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+        - "traefik.http.routers.myweb-http.entrypoints=web"
+        #- "traefik.http.routers.myweb-http.rule=Host(`runtimetwiterror.dev`)"
+        - "traefik.http.routers.myweb-http.rule=Host(`${DOMAIN}`)"
+        - "traefik.http.routers.myweb-http.middlewares=redirect-to-https"
+        - "traefik.http.routers.myweb-http.priority=1"
+        - "traefik.http.routers.simulator.entrypoints=web"
+        #- "traefik.http.routers.simulator.rule=Host(`161.35.20.15`) || Host(`164.92.186.201`)"
+        - "traefik.http.routers.simulator.rule=Host(`${MANAGER1_IP}`) || Host(`${MANAGER2_IP}`)"
+
+  prometheus:
+    image: ${PROM_IMAGE:-runtimeerroritu/minitwit-prometheus:latest}
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      #- "--web.external-url=https://runtimetwiterror.dev/prometheus"
+      - "--web.external-url=${PROM_URL}"
+      - "--web.route-prefix=/prometheus"
+    environment:
+      - GOMEMLIMIT=160MiB
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus_data:/prometheus
+    networks:
+      - app-net
+    deploy:
+      placement:
+        constraints:
+          - node.labels.role == monitoring
+      resources:
+        limits:
+          memory: 200M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.myprom.entrypoints=websecure"
+        - "traefik.http.routers.myprom.tls=true"
+        - "traefik.http.routers.myprom.tls.certresolver=myresolver"
+        #- "traefik.http.routers.myprom.rule=Host(`runtimetwiterror.dev`) && PathPrefix(`/prometheus`)"
+        - "traefik.http.routers.myprom.rule=Host(`${DOMAIN}`) && PathPrefix(`/prometheus`)"
+        - "traefik.http.services.myprom.loadbalancer.server.port=9090"
+
+  loki:
+    image: grafana/loki:3.5.0
+    command: -config.file=/etc/loki/loki-config.yaml
+    environment:
+      - GOMEMLIMIT=200MiB
+    configs:
+      - source: loki_config
+        target: /etc/loki/loki-config.yaml
+    volumes:
+      - loki_data:/loki
+    networks:
+      - app-net
+    deploy:
+      placement:
+        constraints:
+          - node.labels.role == monitoring
+      resources:
+        limits:
+          memory: 250M
+
+  promtail:
+    image: grafana/promtail:3.5.0
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    environment:
+      - GOMEMLIMIT=80MiB
+    configs:
+      - source: promtail_config
+        target: /etc/promtail/promtail-config.yaml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - app-net
+    deploy:
+      mode: global # Deploy on all nodes to collect logs globally
+      resources:
+        limits:
+          memory: 100M
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SERVER_ROOT_URL=${GRAFANA_URL:-https://runtimetwiterror.dev/grafana/}
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    configs:
+      - source: grafana_datasources
+        target: /etc/grafana/provisioning/datasources/datasources.yaml
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - app-net
+    deploy:
+      placement:
+        constraints:
+          - node.labels.role == monitoring
+      resources:
+        limits:
+          memory: 150M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.mygrafana.entrypoints=websecure"
+        - "traefik.http.routers.mygrafana.tls=true"
+        - "traefik.http.routers.mygrafana.tls.certresolver=myresolver"
+        #- "traefik.http.routers.mygrafana.rule=Host(`runtimetwiterror.dev`) && PathPrefix(`/grafana`)"
+        - "traefik.http.routers.mygrafana.rule=Host(`${DOMAIN}`) && PathPrefix(`/grafana`)"
+        - "traefik.http.services.mygrafana.loadbalancer.server.port=3000"
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  letsencrypt_data:

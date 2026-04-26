@@ -19,14 +19,16 @@
     done
   changed_when: false
   no_log: true
+
 - name: Fix interrupted dpkg
   command: dpkg --configure -a
   ignore_errors: true
-  no_log: true
+  no_log: false
 
 - name: Clean apt cache
   command: apt-get clean
-  no_log: true
+  ignore_errors: true
+  no_log: false
 
 - name: Update apt cache
   apt:
@@ -58,6 +60,8 @@
       - docker.io
       - docker-compose
       - containerd
+      - curl
+      - gnupg
       - python3-pip
     state: present
     lock_timeout: 120
@@ -117,26 +121,28 @@
 
 - name: Log in to Docker Hub
   community.docker.docker_login:
-    username: "{{ DOCKERHUB_USERNAME }}"  # username for dockerhub
-    password: "{{ DOCKERHUB_TOKEN }}"   # docker token for docker hub
-  delegate_to: localhost   # runs on local machine
+    username: "{{ DOCKERHUB_USERNAME_Test }}"
+    password: "{{ DOCKERHUB_TOKEN_Test }}"
+  delegate_to: localhost
   become: false
-- name: Build DB image
-  community.docker.docker_image:
-    name: "{{DOCKERHUB_USERNAME}}/minitwit-db:latest"
-    build:
-      path: "{{ playbook_dir }}/../"
-      dockerfile: docker/Dockerfile-db
-    source: build
-    push: true
-  delegate_to: localhost  # builds and pushes from local machine
-  become: false
-  when: inventory_hostname == "dbserver"
-  no_log: true
+  run_once: true
+
+# - name: Build DB image
+#   community.docker.docker_image:
+#     name: "{{ DOCKERHUB_USERNAME_Test }}/minitwit-db:latest"
+#     build:
+#       path: "{{ playbook_dir }}/../"
+#       dockerfile: docker/Dockerfile-db
+#     source: build
+#     push: true
+#   delegate_to: localhost
+#   become: false
+#   when: inventory_hostname in groups['swarm_leaders']
+#   no_log: true
 
 - name: Build APP image
   community.docker.docker_image:
-    name: "{{DOCKERHUB_USERNAME}}/minitwit:latest"
+    name: "{{ DOCKERHUB_USERNAME_Test }}/minitwit:latest"
     build:
       path: "{{ playbook_dir }}/../"
       dockerfile: docker/Dockerfile-app
@@ -144,9 +150,9 @@
         GO_VERSION: "1.25.0"
     source: build
     push: true
-  delegate_to: localhost  # builds and pushes from local machine
+  delegate_to: localhost
   become: false
-  when: inventory_hostname == "webserver"
+  when: inventory_hostname == "manager1"
   no_log: true
 
 ##################################################
@@ -170,35 +176,65 @@
   no_log: true
 
 ##################################################
-# DB server tasks
+# Docker Swarm setup
+##################################################
+
+- name: Init swarm on leader_swarm
+  command: docker swarm init --advertise-addr {{ ansible_eth1.ipv4.address }}
+  when: inventory_hostname in groups['swarm_leaders']
+  ignore_errors: true
+
+- name: Get manager join token
+  command: docker swarm join-token -q manager
+  register: manager_token
+  when: inventory_hostname in groups['swarm_leaders']
+  changed_when: false
+
+- name: Join swarm as manager
+  command: >
+    docker swarm join
+    --token {{ hostvars[groups['swarm_leaders'][0]]['manager_token']['stdout'] }}
+    {{ hostvars[groups['swarm_leaders'][0]]['ansible_eth1']['ipv4']['address'] }}:2377
+  when:
+    - inventory_hostname not in groups['swarm_leaders']
+    - hostvars[groups['swarm_leaders'][0]]['manager_token'] is defined
+    - hostvars[groups['swarm_leaders'][0]]['manager_token']['stdout'] is defined
+  ignore_errors: true
+
+- name: Set monitoring label on leader_swarm
+  command: docker node update --label-add role=monitoring {{ ansible_hostname }}
+  when: inventory_hostname in groups['swarm_leaders']
+  ignore_errors: true
+
+- name: Set ingress label on other nodes
+  command: docker node update --label-add role=ingress {{ inventory_hostname }}
+  when: inventory_hostname not in groups['swarm_leaders']
+  ignore_errors: true
+
+##################################################
+# DB server tasks (runs on leader_swarm)
 ##################################################
 
 - name: Create DB directory
   file:
     path: /opt/minitwit-db
     state: directory
-  when: inventory_hostname == "dbserver"
+  when: inventory_hostname in groups['swarm_leaders']
   no_log: true
 
-- name: Create docker directory
-  file:
-    path: /opt/minitwit-db/docker
-    state: directory
-  when: inventory_hostname == "dbserver"
-  no_log: true
+# - name: Create docker directory
+#   file:
+#     path: /opt/minitwit-db/docker
+#     state: directory
+#   when: inventory_hostname in groups['swarm_leaders']
+#   no_log: true
 
 - name: Create db directory
   file:
     path: /opt/minitwit-db/db
     state: directory
-  when: inventory_hostname == "dbserver"
+  when: inventory_hostname in groups['swarm_leaders']
   no_log: true
-
-# - name: Pull project from Git
-#   git:
-#     repo: https://github.com/yourrepo/minitwit.git
-#     dest: /opt/minitwit
-#     version: main
 
 - name: Copy docker compose file to DB server
   copy:
@@ -207,19 +243,19 @@
     owner: root
     group: root
     mode: '0755'
-  when: inventory_hostname == "dbserver"
+  when: inventory_hostname in groups['swarm_leaders']
   notify: restart db
   no_log: true
 
-- name: Copy docker files to DB server
-  copy:
-    src: "{{ playbook_dir }}/../docker/Dockerfile-db"
-    dest: /opt/minitwit-db/docker/Dockerfile-db
-    owner: root
-    group: root
-    mode: '0755'
-  when: inventory_hostname == "dbserver"
-  no_log: true
+# - name: Copy docker files to DB server
+#   copy:
+#     src: "{{ playbook_dir }}/../docker/Dockerfile-db"
+#     dest: /opt/minitwit-db/docker/Dockerfile-db
+#     owner: root
+#     group: root
+#     mode: '0755'
+#   when: inventory_hostname in groups['swarm_leaders']
+#   no_log: false
 
 - name: Copy Schema SQL to DB server
   copy:
@@ -228,9 +264,8 @@
     owner: root
     group: root
     mode: '0755'
-  when: inventory_hostname == "dbserver"
+  when: inventory_hostname in groups['swarm_leaders']
   no_log: true
-
 
 - name: Start DB container
   community.docker.docker_compose_v2:
@@ -239,11 +274,11 @@
       - docker-compose-db.yaml
     state: present
     build: always
-  when: inventory_hostname == "dbserver"
+  when: inventory_hostname in groups['swarm_leaders']
   no_log: true
 
 ##################################################
-# App playbook tasks
+# App stack deploy (runs on leader_swarm after swarm is ready)
 ##################################################
 
 - name: Create application directory
@@ -251,25 +286,45 @@
     path: /opt/minitwit
     state: directory
     mode: '0755'
-  when: inventory_hostname == "webserver"
+  when: inventory_hostname in groups['swarm_leaders']
   no_log: true
 
-- name: Copy docker compose file to Web server
+- name: Copy docker stack file to leader
   copy:
-    src: "{{ playbook_dir }}/../docker-compose-app.yaml"
-    dest: /opt/minitwit
-    owner: root
-    group: root
+    src: "{{ playbook_dir }}/../docker-stack.yml"
+    dest: /opt/minitwit/docker-stack.yml
     mode: '0755'
-  when: inventory_hostname == "webserver"
-  notify: restart web
+  when: inventory_hostname in groups['swarm_leaders']
   no_log: true
 
-- name: Start Web container
-  community.docker.docker_compose_v2:
-    project_src: /opt/minitwit
-    files:
-      - docker-compose-app.yaml
-    state: present
-  when: inventory_hostname == "webserver"
-  no_log: true
+- name: Create minitwit_deploy config directory
+  file:
+    path: /opt/minitwit/minitwit_deploy
+    state: directory
+    mode: '0755'
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Copy stack config files
+  copy:
+    src: "{{ item.src }}"
+    dest: "/opt/minitwit/minitwit_deploy/{{ item.dest }}"
+    mode: '0644'
+  loop:
+    - {src: "{{ playbook_dir }}/../prometheus/prometheus.yml", dest: "prometheus.yml"}
+    - {src: "{{ playbook_dir }}/../loki/loki-config.yaml", dest: "loki-config.yaml"}
+    - {src: "{{ playbook_dir }}/../promtail/promtail-config.yaml", dest: "promtail-config.yaml"}
+    - {src: "{{ playbook_dir }}/../grafana/datasources.yaml", dest: "datasources.yaml"}
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Deploy stack to swarm
+  command: docker stack deploy -c /opt/minitwit/docker-stack.yml minitwit --with-registry-auth
+  environment:
+    DOCKER_IMAGE: "{{ DOCKER_IMAGE | default('runtimeerroritu/minitwit:latest') }}"
+    PROM_IMAGE: "{{ PROM_IMAGE | default('runtimeerroritu/minitwit-prometheus:latest') }}"
+    DB_ADDR: "{{ DB_ADDR }}"
+    DOMAIN: "{{ DOMAIN }}"
+    MANAGER1_IP: "{{ MANAGER1_IP }}"
+    MANAGER2_IP: "{{ MANAGER2_IP }}"
+    PROM_URL: "{{ PROM_URL }}"
+    GRAFANA_URL: "{{ GRAFANA_URL }}"
+  when: inventory_hostname in groups['swarm_leaders']
