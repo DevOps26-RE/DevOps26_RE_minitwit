@@ -79,7 +79,6 @@ type ApplicationState struct {
 
 func (ApplicationState) TableName() string { return "application_state" }
 
-
 func main() {
 	err := init_db()
 	if err != nil {
