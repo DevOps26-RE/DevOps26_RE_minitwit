@@ -2,11 +2,9 @@ name: CI/CD Pipeline
 
 "on":
   push:
-    # Only trigger on push to main branch
     branches:
       - main
   pull_request:
-    # Only trigger on PRs targeting main branch
     branches:
       - main
 
@@ -86,18 +84,18 @@ jobs:
         env:
           DOCKER_USER: ${{ vars.DOCKERHUB_USERNAME }}
         run: |
-          # Sanitize branch name replacing slashes with dashes
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           BRANCH_NAME=$(echo '${{ github.head_ref || github.ref_name }}' | tr '/' '-')
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            # Define tags for BOTH the main app and Prometheus
-            echo "app_tags=${DOCKER_USER}/minitwit:latest" >> $GITHUB_OUTPUT
-            echo "prom_tags=${DOCKER_USER}/minitwit-prometheus:latest" >> $GITHUB_OUTPUT
-            echo "image_tag=latest" >> $GITHUB_OUTPUT
+            TAG="prod-${SHORT_SHA}"
+            echo "app_tags=${DOCKER_USER}/minitwit:${TAG},${DOCKER_USER}/minitwit:latest" >> $GITHUB_OUTPUT
+            echo "prom_tags=${DOCKER_USER}/minitwit-prometheus:${TAG},${DOCKER_USER}/minitwit-prometheus:latest" >> $GITHUB_OUTPUT
+            echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
           else
-            # Define tags for BOTH the main app and Prometheus for PRs
-            echo "app_tags=${DOCKER_USER}/minitwit:test-${BRANCH_NAME},${DOCKER_USER}/minitwit:test-latest" >> $GITHUB_OUTPUT
-            echo "prom_tags=${DOCKER_USER}/minitwit-prometheus:test-${BRANCH_NAME},${DOCKER_USER}/minitwit-prometheus:test-latest" >> $GITHUB_OUTPUT
-            echo "image_tag=test-${BRANCH_NAME}" >> $GITHUB_OUTPUT
+            TAG="test-${BRANCH_NAME}-${SHORT_SHA}"
+            echo "app_tags=${DOCKER_USER}/minitwit:${TAG},${DOCKER_USER}/minitwit:test-latest" >> $GITHUB_OUTPUT
+            echo "prom_tags=${DOCKER_USER}/minitwit-prometheus:${TAG},${DOCKER_USER}/minitwit-prometheus:test-latest" >> $GITHUB_OUTPUT
+            echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
           fi
 
       - name: Login to Docker Hub
@@ -133,12 +131,8 @@ jobs:
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
-            const body = `✅ Tests passed and test image built!
-
-            Test image: \`test-feature-analysis_tools\`
-
-            You can deploy this for manual testing if needed.`;
-
+            const body = `✅ Tests passed and image built!
+            Tag: \`${{ steps.prepare.outputs.image_tag }}\``;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
