@@ -52,8 +52,6 @@ services:
   web:
     image: ${DOCKER_IMAGE:-runtimeerroritu/minitwit:latest}
     environment:
-      #DB_ADDR: "10.114.0.6" # Jakubs DO private ip
-      #DB_ADDR: "10.114.0.2"
       DB_ADDR: "${DB_ADDR}"
       SECRET_KEY: "${SECRET_KEY}"
     networks:
