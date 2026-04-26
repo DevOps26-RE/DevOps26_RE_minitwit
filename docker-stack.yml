@@ -9,13 +9,13 @@ networks:
 # ==========================================
 configs:
   prometheus_config:
-    file: ./minitwit_deploy/prometheus.yml
+    file: ./prometheus/prometheus.yml
   loki_config:
-    file: ./minitwit_deploy/loki-config.yaml
+    file: ./loki/loki-config.yaml
   promtail_config:
-    file: ./minitwit_deploy/promtail-config.yaml
+    file: ./promtail/promtail-config.yaml
   grafana_datasources:
-    file: ./minitwit_deploy/datasources.yaml
+    file: ./grafana/datasources.yaml
 
 services:
   traefik:
