@@ -55,6 +55,7 @@ services:
       #DB_ADDR: "10.114.0.6" # Jakubs DO private ip
       #DB_ADDR: "10.114.0.2"
       DB_ADDR: "${DB_ADDR}"
+      SECRET_KEY: "${SECRET_KEY}"
     networks:
       - app-net
     deploy:
@@ -71,25 +72,21 @@ services:
         - "traefik.http.routers.myweb.entrypoints=websecure"
         - "traefik.http.routers.myweb.tls=true"
         - "traefik.http.routers.myweb.tls.certresolver=myresolver"
-        #- "traefik.http.routers.myweb.rule=Host(`runtimetwiterror.dev`)"
         - "traefik.http.routers.myweb.rule=Host(`${DOMAIN}`)"
         - "traefik.http.services.myweb.loadbalancer.server.port=5001"
         - "traefik.docker.network=app-net"
         - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
         - "traefik.http.routers.myweb-http.entrypoints=web"
-        #- "traefik.http.routers.myweb-http.rule=Host(`runtimetwiterror.dev`)"
         - "traefik.http.routers.myweb-http.rule=Host(`${DOMAIN}`)"
         - "traefik.http.routers.myweb-http.middlewares=redirect-to-https"
         - "traefik.http.routers.myweb-http.priority=1"
         - "traefik.http.routers.simulator.entrypoints=web"
-        #- "traefik.http.routers.simulator.rule=Host(`161.35.20.15`) || Host(`164.92.186.201`)"
         - "traefik.http.routers.simulator.rule=Host(`${MANAGER1_IP}`) || Host(`${MANAGER2_IP}`)"
 
   prometheus:
     image: ${PROM_IMAGE:-runtimeerroritu/minitwit-prometheus:latest}
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-      #- "--web.external-url=https://runtimetwiterror.dev/prometheus"
       - "--web.external-url=${PROM_URL}"
       - "--web.route-prefix=/prometheus"
     environment:
@@ -113,7 +110,6 @@ services:
         - "traefik.http.routers.myprom.entrypoints=websecure"
         - "traefik.http.routers.myprom.tls=true"
         - "traefik.http.routers.myprom.tls.certresolver=myresolver"
-        #- "traefik.http.routers.myprom.rule=Host(`runtimetwiterror.dev`) && PathPrefix(`/prometheus`)"
         - "traefik.http.routers.myprom.rule=Host(`${DOMAIN}`) && PathPrefix(`/prometheus`)"
         - "traefik.http.services.myprom.loadbalancer.server.port=9090"
 
@@ -180,7 +176,6 @@ services:
         - "traefik.http.routers.mygrafana.entrypoints=websecure"
         - "traefik.http.routers.mygrafana.tls=true"
         - "traefik.http.routers.mygrafana.tls.certresolver=myresolver"
-        #- "traefik.http.routers.mygrafana.rule=Host(`runtimetwiterror.dev`) && PathPrefix(`/grafana`)"
         - "traefik.http.routers.mygrafana.rule=Host(`${DOMAIN}`) && PathPrefix(`/grafana`)"
         - "traefik.http.services.mygrafana.loadbalancer.server.port=3000"
 

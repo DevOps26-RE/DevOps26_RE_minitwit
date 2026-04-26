@@ -165,6 +165,7 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.1
         env:
+          SECRET_KEY: ${{ github.ref == 'refs/heads/main' && secrets.APP_SECRET_KEY || secrets.APP_SECRET_KEY_STAGE }}
           DB_ADDR: ${{ github.ref == 'refs/heads/main' && vars.DB_PRIVATE_IP || vars.DB_PRIVATE_IP_STAGE }}
           DOCKER_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/minitwit:${{ needs.build-and-push.outputs.image_tag }}
           PROM_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/minitwit-prometheus:${{ needs.build-and-push.outputs.image_tag }}
@@ -177,7 +178,7 @@ jobs:
           host: ${{ env.MANAGER1_IP }}
           username: ${{ vars.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          envs: DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
+          envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
           script: |
             cd /opt/minitwit
             docker stack deploy -c docker-stack.yml minitwit --with-registry-auth

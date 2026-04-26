@@ -7,7 +7,6 @@ services:
       POSTGRES_PASSWORD: minitwit
       POSTGRES_DB: minitwit
     volumes:
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"

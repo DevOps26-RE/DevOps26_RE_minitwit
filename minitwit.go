@@ -23,7 +23,6 @@ import (
 
 const (
 	PER_PAGE         int    = 30
-	SECRET_KEY       string = "development key"
 	RouteRegister    string = "/register"
 	RoutePublic      string = "/public"
 	RouteLogin       string = "/login"
@@ -34,7 +33,17 @@ const (
 	ErrSaveSession   string = "failed to save session: %v"
 )
 
-var db *gorm.DB
+var (
+	db         *gorm.DB
+	SECRET_KEY string
+)
+
+func init() {
+	SECRET_KEY = os.Getenv("SECRET_KEY")
+	if SECRET_KEY == "" {
+		SECRET_KEY = "development key"
+	}
+}
 
 type User struct {
 	UserID   int    `gorm:"column:user_id;primaryKey;autoIncrement"`
@@ -62,6 +71,13 @@ type Follower struct {
 }
 
 func (Follower) TableName() string { return "follower" }
+
+type ApplicationState struct {
+	Key   string `gorm:"column:key;primaryKey"`
+	Value int    `gorm:"column:value"`
+}
+
+func (ApplicationState) TableName() string { return "application_state" }
 
 func main() {
 	err := init_db()
@@ -155,7 +171,25 @@ func connect_db() (*gorm.DB, error) {
 func init_db() error {
 	var err error
 	db, err = connect_db()
-	return err
+	if err != nil {
+		return err
+	}
+
+	// GORM AutoMigrate will handle Create Table if table not exist and Alter Table if new columns are added
+	err = db.AutoMigrate(&User{}, &Message{}, &Follower{}, &ApplicationState{})
+	if err != nil {
+		log.Printf("AutoMigrate failed: %v", err)
+		return err
+	}
+
+	var count int64
+	db.Model(&ApplicationState{}).Where("key = ?", "latest_id").Count(&count)
+	if count == 0 {
+		db.Create(&ApplicationState{Key: "latest_id", Value: -1})
+		log.Println("Initialized application_state with latest_id = -1")
+	}
+
+	return nil
 }
 
 func get_user_id(username string) (int, error) {
