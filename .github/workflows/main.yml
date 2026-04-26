@@ -169,11 +169,24 @@ jobs:
           PROM_URL: https://${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/prometheus
           GRAFANA_URL: https://${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/grafana/
         with:
-          host: ${{ env.MANAGER1_IP }}
+          host: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST || vars.DO_HOST_STAGE }}
           username: ${{ vars.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
           envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
           script: |
             cd /opt/minitwit
+            
+            echo "🚀 Start Deploy：${DOCKER_IMAGE}"
+            
+            DOCKER_IMAGE="${DOCKER_IMAGE}" \
+            PROM_IMAGE="${PROM_IMAGE}" \
+            DB_ADDR="${DB_ADDR}" \
+            SECRET_KEY="${SECRET_KEY}" \
+            DOMAIN="${DOMAIN}" \
+            MANAGER1_IP="${MANAGER1_IP}" \
+            MANAGER2_IP="${MANAGER2_IP}" \
+            PROM_URL="${PROM_URL}" \
+            GRAFANA_URL="${GRAFANA_URL}" \
             docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
+            
             docker image prune -af --filter "until=24h"
