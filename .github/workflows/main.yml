@@ -159,19 +159,9 @@ jobs:
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
           envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
           script: |
-            set -e  #
+            set -e
             cd /opt/minitwit
             
             echo "🚀 Start Deploy：${DOCKER_IMAGE}"
-            
-            DOCKER_IMAGE="${DOCKER_IMAGE}" \
-            DB_ADDR="${DB_ADDR}" \
-            SECRET_KEY="${SECRET_KEY}" \
-            DOMAIN="${DOMAIN}" \
-            MANAGER1_IP="${MANAGER1_IP}" \
-            MANAGER2_IP="${MANAGER2_IP}" \
-            PROM_URL="${PROM_URL}" \
-            GRAFANA_URL="${GRAFANA_URL}" \
             docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
-            
             docker image prune -af --filter "until=24h"
