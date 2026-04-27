@@ -30,7 +30,7 @@ services:
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=aile@itu.dk"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-      - "--providers.swarm.network=app-net"
+      - "--providers.swarm.network=minitwit_app-net"
     ports:
       - target: 80
         published: 80
@@ -72,7 +72,7 @@ services:
         - "traefik.http.routers.myweb.tls.certresolver=myresolver"
         - "traefik.http.routers.myweb.rule=Host(`${DOMAIN}`)"
         - "traefik.http.services.myweb.loadbalancer.server.port=5001"
-        - "traefik.docker.network=app-net"
+        - "traefik.docker.network=minitwit_app-net"
         - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
         - "traefik.http.routers.myweb-http.entrypoints=web"
         - "traefik.http.routers.myweb-http.rule=Host(`${DOMAIN}`)"
@@ -111,6 +111,7 @@ services:
         - "traefik.http.routers.myprom.tls.certresolver=myresolver"
         - "traefik.http.routers.myprom.rule=Host(`${DOMAIN}`) && PathPrefix(`/prometheus`)"
         - "traefik.http.services.myprom.loadbalancer.server.port=9090"
+        - "traefik.docker.network=minitwit_app-net"
 
   loki:
     image: grafana/loki:3.5.0
@@ -181,6 +182,7 @@ services:
         - "traefik.http.routers.mygrafana.tls.certresolver=myresolver"
         - "traefik.http.routers.mygrafana.rule=Host(`${DOMAIN}`) && PathPrefix(`/grafana`)"
         - "traefik.http.services.mygrafana.loadbalancer.server.port=3000"
+        - "traefik.docker.network=minitwit_app-net"
 
 volumes:
   prometheus_data:
