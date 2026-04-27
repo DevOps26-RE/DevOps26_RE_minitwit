@@ -117,10 +117,15 @@ def get_actions():
 
 def main(host):
     failures = []
-    
-
     totals = defaultdict(int)
-    for action, delay in get_actions():
+
+    # Use enumerate to keep track of the iteration count
+    for i, (action, delay) in enumerate(get_actions()):
+        # Stop the loop after 50 API calls
+        if i >= 50:
+            print("\n[Info] Reached the limit of 10 API calls. Stopping simulator early for fast testing.")
+            break
+
         command = action["post_type"]
         if command in {"register", "tweet", "follow", "unfollow"}:
             totals[command] += 1
