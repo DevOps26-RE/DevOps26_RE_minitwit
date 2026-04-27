@@ -1,16 +1,19 @@
 name: Deploy DB Infrastructure to Droplet
 
+# Manual trigger only, target environment selection is required
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'docker-compose-db.yaml'
-      - '.github/workflows/deploy-db.yml'
-  pull_request:
-    paths:
-      - 'docker-compose-db.yaml'
-      - '.github/workflows/deploy-db.yml'
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: |
+          ⚠️ Please select the target environment (stage or prod) Note: this will cause a few seconds downtime on db server, you can only trigger this manually.
+          For production environment, you should always run this when the traffic is low.
+        required: true
+        default: 'stage'
+        type: choice
+        options:
+          - stage
+          - prod
 
 jobs:
   deploy-db:
@@ -22,9 +25,10 @@ jobs:
       - name: Copy Compose file to DB Server
         uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
         with:
-          host: ${{ github.ref == 'refs/heads/main' && vars.DB_PUBLIC_IP || vars.DB_PUBLIC_IP_STAGE }}
+          # Determine which variable to use based on the manually selected target_env
+          host: ${{ github.event.inputs.target_env == 'prod' && vars.DB_PUBLIC_IP || vars.DB_PUBLIC_IP_STAGE }}
           username: ${{ vars.DO_USER }}
-          key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
+          key: ${{ github.event.inputs.target_env == 'prod' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
           source: "docker-compose-db.yaml"
           target: "/root"
           overwrite: true
@@ -32,11 +36,11 @@ jobs:
       - name: Update Database Container via SSH
         uses: appleboy/ssh-action@8faa84277b88b6cd1455986f459aa66cf72bc8a3 #v1.2.1
         with:
-          host: ${{ github.ref == 'refs/heads/main' && vars.DB_PUBLIC_IP || vars.DB_PUBLIC_IP_STAGE }}
+          host: ${{ github.event.inputs.target_env == 'prod' && vars.DB_PUBLIC_IP || vars.DB_PUBLIC_IP_STAGE }}
           username: ${{ vars.DO_USER }}
-          key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
+          key: ${{ github.event.inputs.target_env == 'prod' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
           script: |
             cd /root
-            echo "Updating Docker container configuration on ${{ github.ref == 'refs/heads/main' && 'Production' || 'Staging' }}..."
+            echo "🚀 Starting to update Docker containers in the [${{ github.event.inputs.target_env }}] environment..."
             docker compose -f docker-compose-db.yaml up -d
-            echo "DB Infrastructure Deployment Successful"
+            echo "✅ DB Infrastructure deployment completed successfully."
