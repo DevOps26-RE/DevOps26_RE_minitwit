@@ -151,8 +151,8 @@ jobs:
           DOMAIN: ${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}
           MANAGER1_IP: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST || vars.DO_HOST_STAGE }}
           MANAGER2_IP: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST_2 || vars.DO_HOST_2_STAGE }}
-          PROM_URL: https://${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/prometheus
-          GRAFANA_URL: https://${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/grafana/
+          PROM_URL: ${{ github.ref == 'refs/heads/main' && 'https://' || 'http://' }}${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/prometheus
+          GRAFANA_URL: ${{ github.ref == 'refs/heads/main' && 'https://' || 'http://' }}${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/grafana/
         with:
           host: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST || vars.DO_HOST_STAGE }}
           username: ${{ vars.DO_USER }}
