@@ -88,12 +88,10 @@ jobs:
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             TAG="prod-${SHORT_SHA}"
             echo "app_tags=${DOCKER_USER}/minitwit:${TAG},${DOCKER_USER}/minitwit:latest" >> $GITHUB_OUTPUT
-            echo "prom_tags=${DOCKER_USER}/minitwit-prometheus:${TAG},${DOCKER_USER}/minitwit-prometheus:latest" >> $GITHUB_OUTPUT
             echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
           else
             TAG="test-${BRANCH_NAME}-${SHORT_SHA}"
             echo "app_tags=${DOCKER_USER}/minitwit:${TAG},${DOCKER_USER}/minitwit:test-latest" >> $GITHUB_OUTPUT
-            echo "prom_tags=${DOCKER_USER}/minitwit-prometheus:${TAG},${DOCKER_USER}/minitwit-prometheus:test-latest" >> $GITHUB_OUTPUT
             echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
           fi
 
@@ -150,7 +148,6 @@ jobs:
           SECRET_KEY: ${{ github.ref == 'refs/heads/main' && secrets.APP_SECRET_KEY || secrets.APP_SECRET_KEY_STAGE }}
           DB_ADDR: ${{ github.ref == 'refs/heads/main' && vars.DB_PRIVATE_IP || vars.DB_PRIVATE_IP_STAGE }}
           DOCKER_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/minitwit:${{ needs.build-and-push.outputs.image_tag }}
-          PROM_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/minitwit-prometheus:${{ needs.build-and-push.outputs.image_tag }}
           DOMAIN: ${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}
           MANAGER1_IP: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST || vars.DO_HOST_STAGE }}
           MANAGER2_IP: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST_2 || vars.DO_HOST_2_STAGE }}
@@ -160,7 +157,7 @@ jobs:
           host: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST || vars.DO_HOST_STAGE }}
           username: ${{ vars.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,PROM_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
+          envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
           script: |
             set -e  #
             cd /opt/minitwit
@@ -168,7 +165,6 @@ jobs:
             echo "🚀 Start Deploy：${DOCKER_IMAGE}"
             
             DOCKER_IMAGE="${DOCKER_IMAGE}" \
-            PROM_IMAGE="${PROM_IMAGE}" \
             DB_ADDR="${DB_ADDR}" \
             SECRET_KEY="${SECRET_KEY}" \
             DOMAIN="${DOMAIN}" \
