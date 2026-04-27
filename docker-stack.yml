@@ -97,6 +97,7 @@ services:
     networks:
       - app-net
     deploy:
+      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
@@ -124,6 +125,7 @@ services:
     networks:
       - app-net
     deploy:
+      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
@@ -163,6 +165,7 @@ services:
     networks:
       - app-net
     deploy:
+      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
