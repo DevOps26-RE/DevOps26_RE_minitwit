@@ -82,7 +82,7 @@ services:
         - "traefik.http.routers.simulator.rule=Host(`${MANAGER1_IP}`) || Host(`${MANAGER2_IP}`)"
 
   prometheus:
-    image: ${PROM_IMAGE:-runtimeerroritu/minitwit-prometheus:latest}
+    image: prom/prometheus:v3.10.0
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--web.external-url=${PROM_URL}"
