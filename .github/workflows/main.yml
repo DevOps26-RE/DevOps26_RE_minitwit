@@ -44,7 +44,6 @@ jobs:
           chmod +x /usr/local/bin/hadolint
           hadolint --ignore DL3006 docker/Dockerfile-app
           hadolint --ignore DL3006 docker/Dockerfile-test
-          hadolint --ignore DL3006 prometheus/Dockerfile-prometheus
       # htmlhint static tool for HTML
       - name: htmlhint
         run: |

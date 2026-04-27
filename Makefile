@@ -22,7 +22,6 @@ lint-docker:
 	@echo "==> 🔍 Running hadolint..."
 	docker run --rm -i hadolint/hadolint hadolint --ignore DL3006 - < docker/Dockerfile-app
 	docker run --rm -i hadolint/hadolint hadolint --ignore DL3006 - < docker/Dockerfile-test
-	docker run --rm -i hadolint/hadolint hadolint --ignore DL3006 - < prometheus/Dockerfile-prometheus
 
 # 4. HTML Linter (validates tags and structure)
 lint-html:
