@@ -37,7 +37,7 @@ resource "digitalocean_droplet" "manager1_stage" {
   size     = "s-1vcpu-1gb"
   ssh_keys = [data.digitalocean_ssh_key.my_ssh_key.id]
   vpc_uuid = digitalocean_vpc.minitwit_vpc.id
-  tags     = [digitalocean_tag.minitwit_stage.id] # 引用標籤資源
+  tags     = [digitalocean_tag.minitwit_stage.id]
 }
 
 # --- Manager 2 ---
@@ -101,6 +101,11 @@ resource "digitalocean_firewall" "minitwit_fw" {
   inbound_rule {
     protocol         = "udp"
     port_range       = "4789"
+    source_addresses = [digitalocean_vpc.minitwit_vpc.ip_range]
+  }
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "5432"
     source_addresses = [digitalocean_vpc.minitwit_vpc.ip_range]
   }
 
