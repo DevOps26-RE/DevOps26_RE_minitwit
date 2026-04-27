@@ -54,3 +54,15 @@ CLAUDE.md
 # Staging files
 .env
 .env_staging
+
+# === Terraform ===
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl
+
+# === Ansible ===
+ansible/*.ini
+*.retry
