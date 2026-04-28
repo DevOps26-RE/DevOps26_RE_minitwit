@@ -115,45 +115,6 @@
     dest: /etc/containerd/config.toml
   no_log: true
 
-##################################################
-# Create image in dockerhub
-##################################################
-
-- name: Log in to Docker Hub
-  community.docker.docker_login:
-    username: "{{ DOCKERHUB_USERNAME_Test }}"
-    password: "{{ DOCKERHUB_TOKEN_Test }}"
-  delegate_to: localhost
-  become: false
-  run_once: true
-
-# - name: Build DB image
-#   community.docker.docker_image:
-#     name: "{{ DOCKERHUB_USERNAME_Test }}/minitwit-db:latest"
-#     build:
-#       path: "{{ playbook_dir }}/../"
-#       dockerfile: docker/Dockerfile-db
-#     source: build
-#     push: true
-#   delegate_to: localhost
-#   become: false
-#   when: inventory_hostname in groups['swarm_leaders']
-#   no_log: true
-
-- name: Build APP image
-  community.docker.docker_image:
-    name: "{{ DOCKERHUB_USERNAME_Test }}/minitwit:latest"
-    build:
-      path: "{{ playbook_dir }}/../"
-      dockerfile: docker/Dockerfile-app
-      args:
-        GO_VERSION: "1.25.0"
-    source: build
-    push: true
-  delegate_to: localhost
-  become: false
-  when: inventory_hostname == "manager1"
-  no_log: true
 
 ##################################################
 # Start container services
@@ -215,67 +176,12 @@
 # DB server tasks (runs on leader_swarm)
 ##################################################
 
-- name: Create DB directory
+- name: Create db data directory
   file:
-    path: /opt/minitwit-db
+    path: /root/db
     state: directory
-  when: inventory_hostname in groups['swarm_leaders']
-  no_log: true
-
-# - name: Create docker directory
-#   file:
-#     path: /opt/minitwit-db/docker
-#     state: directory
-#   when: inventory_hostname in groups['swarm_leaders']
-#   no_log: true
-
-- name: Create db directory
-  file:
-    path: /opt/minitwit-db/db
-    state: directory
-  when: inventory_hostname in groups['swarm_leaders']
-  no_log: true
-
-- name: Copy docker compose file to DB server
-  copy:
-    src: "{{ playbook_dir }}/../docker-compose-db.yaml"
-    dest: /opt/minitwit-db/
-    owner: root
-    group: root
     mode: '0755'
   when: inventory_hostname in groups['swarm_leaders']
-  notify: restart db
-  no_log: true
-
-# - name: Copy docker files to DB server
-#   copy:
-#     src: "{{ playbook_dir }}/../docker/Dockerfile-db"
-#     dest: /opt/minitwit-db/docker/Dockerfile-db
-#     owner: root
-#     group: root
-#     mode: '0755'
-#   when: inventory_hostname in groups['swarm_leaders']
-#   no_log: false
-
-- name: Copy Schema SQL to DB server
-  copy:
-    src: "{{ playbook_dir }}/../db/schema.sql"
-    dest: /opt/minitwit-db/db/schema.sql
-    owner: root
-    group: root
-    mode: '0755'
-  when: inventory_hostname in groups['swarm_leaders']
-  no_log: true
-
-- name: Start DB container
-  community.docker.docker_compose_v2:
-    project_src: /opt/minitwit-db
-    files:
-      - docker-compose-db.yaml
-    state: present
-    build: always
-  when: inventory_hostname in groups['swarm_leaders']
-  no_log: true
 
 ##################################################
 # App stack deploy (runs on leader_swarm after swarm is ready)
@@ -289,26 +195,11 @@
   when: inventory_hostname in groups['swarm_leaders']
   no_log: true
 
-- name: Copy docker stack file to leader
-  copy:
-    src: "{{ playbook_dir }}/../docker-stack.yml"
-    dest: /opt/minitwit/docker-stack.yml
-    mode: '0755'
-  when: inventory_hostname in groups['swarm_leaders']
-  no_log: true
-
-- name: Create minitwit_deploy config directory
+- name: Create config directories
   file:
-    path: /opt/minitwit/minitwit_deploy
+    path: "/opt/minitwit/{{ item }}"
     state: directory
     mode: '0755'
-  when: inventory_hostname in groups['swarm_leaders']
-
-- name: Copy stack config files
-  copy:
-    src: "{{ item.src }}"
-    dest: "/opt/minitwit/minitwit_deploy/{{ item.dest }}"
-    mode: '0644'
   loop:
     - {src: "{{ playbook_dir }}/../prometheus/prometheus.yml", dest: "prometheus.yml"}
     - {src: "{{ playbook_dir }}/../loki/loki-config.yaml", dest: "loki-config.yaml"}

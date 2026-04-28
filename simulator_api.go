@@ -9,8 +9,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var Latest int = -1
-
 type SimMessage struct {
 	Content string `json:"content"`
 	PubDate int64  `json:"pub_date"`
@@ -37,14 +35,20 @@ func updateLatest(c *gin.Context) {
 	if latestStr != "" {
 		parsedLatest, err := strconv.Atoi(latestStr)
 		if err == nil {
-			Latest = parsedLatest
+			db.Exec("INSERT INTO application_state (key, value) VALUES ('latest_id', ?) ON CONFLICT (key) DO UPDATE SET value = ?", parsedLatest, parsedLatest)
 		}
 	}
 }
 
 // GET /latest
 func get_latest_value(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"latest": Latest})
+	var state ApplicationState
+	err := db.First(&state, "key = ?", "latest_id").Error
+	latest := state.Value
+	if err != nil {
+		latest = -1 // Default fallback if not found
+	}
+	c.JSON(http.StatusOK, gin.H{"latest": latest})
 }
 
 // POST /register

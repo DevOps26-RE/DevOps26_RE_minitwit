@@ -1,0 +1,138 @@
+# ==========================================================================
+# Terraform Configuration for Minitwit - STAGE Environment
+# ==========================================================================
+
+terraform {
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.30.0"
+    }
+  }
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+
+data "digitalocean_ssh_key" "my_ssh_key" {
+  name = var.ssh_key_name
+}
+
+resource "digitalocean_tag" "minitwit_stage" {
+  name = "minitwit-stage"
+}
+
+resource "digitalocean_vpc" "minitwit_vpc" {
+  name     = "minitwit-stage-vpc"
+  region   = "fra1"
+  ip_range = "10.10.10.0/24"
+}
+
+# --- Manager 1 ---
+resource "digitalocean_droplet" "manager1_stage" {
+  image    = "ubuntu-22-04-x64"
+  name     = "manager1-stage"
+  region   = "fra1"
+  size     = "s-1vcpu-1gb"
+  ssh_keys = [data.digitalocean_ssh_key.my_ssh_key.id]
+  vpc_uuid = digitalocean_vpc.minitwit_vpc.id
+  tags     = [digitalocean_tag.minitwit_stage.id]
+}
+
+# --- Manager 2 ---
+resource "digitalocean_droplet" "manager2_stage" {
+  image    = "ubuntu-22-04-x64"
+  name     = "manager2-stage"
+  region   = "fra1"
+  size     = "s-1vcpu-1gb"
+  ssh_keys = [data.digitalocean_ssh_key.my_ssh_key.id]
+  vpc_uuid = digitalocean_vpc.minitwit_vpc.id
+  tags     = [digitalocean_tag.minitwit_stage.id]
+}
+
+# --- Swarm Leader / DB / Monitoring ---
+resource "digitalocean_droplet" "db_stage" {
+  image    = "ubuntu-22-04-x64"
+  name     = "db-stage"
+  region   = "fra1"
+  size     = "s-2vcpu-2gb"
+  ssh_keys = [data.digitalocean_ssh_key.my_ssh_key.id]
+  vpc_uuid = digitalocean_vpc.minitwit_vpc.id
+  tags     = [digitalocean_tag.minitwit_stage.id]
+}
+
+resource "digitalocean_firewall" "minitwit_fw" {
+  name = "minitwit-stage-firewall"
+  tags = [digitalocean_tag.minitwit_stage.id]
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "80"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "443"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "22"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "2377"
+    source_addresses = [digitalocean_vpc.minitwit_vpc.ip_range]
+  }
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "7946"
+    source_addresses = [digitalocean_vpc.minitwit_vpc.ip_range]
+  }
+  inbound_rule {
+    protocol         = "udp"
+    port_range       = "7946"
+    source_addresses = [digitalocean_vpc.minitwit_vpc.ip_range]
+  }
+  inbound_rule {
+    protocol         = "udp"
+    port_range       = "4789"
+    source_addresses = [digitalocean_vpc.minitwit_vpc.ip_range]
+  }
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "5432"
+    source_addresses = [digitalocean_vpc.minitwit_vpc.ip_range]
+  }
+
+  outbound_rule {
+    protocol              = "tcp"
+    port_range            = "all"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+  outbound_rule {
+    protocol              = "udp"
+    port_range            = "all"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+}
+
+# --- Generate Ansible Inventory ---
+resource "local_file" "ansible_inventory" {
+  content = <<EOT
+[swarm_leaders]
+db-stage ansible_host=${digitalocean_droplet.db_stage.ipv4_address}
+
+[swarm_managers]
+manager1-stage ansible_host=${digitalocean_droplet.manager1_stage.ipv4_address}
+manager2-stage ansible_host=${digitalocean_droplet.manager2_stage.ipv4_address}
+
+[all:vars]
+ansible_user=root
+EOT
+  filename = "../../ansible/inventory_stage.ini"
+}

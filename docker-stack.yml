@@ -9,13 +9,13 @@ networks:
 # ==========================================
 configs:
   prometheus_config:
-    file: ./minitwit_deploy/prometheus.yml
+    file: ./prometheus/prometheus.yml
   loki_config:
-    file: ./minitwit_deploy/loki-config.yaml
+    file: ./loki/loki-config.yaml
   promtail_config:
-    file: ./minitwit_deploy/promtail-config.yaml
+    file: ./promtail/promtail-config.yaml
   grafana_datasources:
-    file: ./minitwit_deploy/datasources.yaml
+    file: ./grafana/datasources.yaml
 
 services:
   traefik:
@@ -52,9 +52,8 @@ services:
   web:
     image: ${DOCKER_IMAGE:-runtimeerroritu/minitwit:latest}
     environment:
-      #DB_ADDR: "10.114.0.6" # Jakubs DO private ip
-      #DB_ADDR: "10.114.0.2"
       DB_ADDR: "${DB_ADDR}"
+      SECRET_KEY: "${SECRET_KEY}"
     networks:
       - app-net
     deploy:
@@ -83,14 +82,13 @@ services:
         - "traefik.http.routers.simulator.rule=Host(`${MANAGER1_IP}`) || Host(`${MANAGER2_IP}`)"
 
   prometheus:
-    image: ${PROM_IMAGE:-runtimeerroritu/minitwit-prometheus:latest}
+    image: prom/prometheus:v3.10.0
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-      #- "--web.external-url=https://runtimetwiterror.dev/prometheus"
       - "--web.external-url=${PROM_URL}"
       - "--web.route-prefix=/prometheus"
     environment:
-      - GOMEMLIMIT=160MiB
+      - GOMEMLIMIT=240MiB
     configs:
       - source: prometheus_config
         target: /etc/prometheus/prometheus.yml
@@ -99,20 +97,21 @@ services:
     networks:
       - app-net
     deploy:
+      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
       resources:
         limits:
-          memory: 200M
+          memory: 300M
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.myprom.entrypoints=${ENTRYPOINT:-websecure}"
         - "traefik.http.routers.myprom.tls=${TLS_ENABLED:-true}"
         - "traefik.http.routers.myprom.tls.certresolver=myresolver"
-        #- "traefik.http.routers.myprom.rule=Host(`runtimetwiterror.dev`) && PathPrefix(`/prometheus`)"
         - "traefik.http.routers.myprom.rule=Host(`${DOMAIN}`) && PathPrefix(`/prometheus`)"
         - "traefik.http.services.myprom.loadbalancer.server.port=9090"
+        - "traefik.docker.network=minitwit_app-net"
 
   loki:
     image: grafana/loki:3.5.0
@@ -127,12 +126,13 @@ services:
     networks:
       - app-net
     deploy:
+      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
       resources:
         limits:
-          memory: 250M
+          memory: 350M
 
   promtail:
     image: grafana/promtail:3.5.0
@@ -166,20 +166,23 @@ services:
     networks:
       - app-net
     deploy:
+      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
       resources:
         limits:
-          memory: 300M
+          memory: 512M
+        reservations:
+          memory: 256M
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.mygrafana.entrypoints=${ENTRYPOINT:-websecure}"
         - "traefik.http.routers.mygrafana.tls=${TLS_ENABLED:-true}"
         - "traefik.http.routers.mygrafana.tls.certresolver=myresolver"
-        #- "traefik.http.routers.mygrafana.rule=Host(`runtimetwiterror.dev`) && PathPrefix(`/grafana`)"
         - "traefik.http.routers.mygrafana.rule=Host(`${DOMAIN}`) && PathPrefix(`/grafana`)"
         - "traefik.http.services.mygrafana.loadbalancer.server.port=3000"
+        - "traefik.docker.network=minitwit_app-net"
 
 volumes:
   prometheus_data:
