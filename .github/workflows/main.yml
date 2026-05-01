@@ -155,11 +155,12 @@ jobs:
           GRAFANA_URL: ${{ github.ref == 'refs/heads/main' && 'https://' || 'http://' }}${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/grafana/
           ENTRYPOINT: ${{ github.ref == 'refs/heads/main' && vars.ENTRYPOINT || vars.ENTRYPOINT_STAGE }}
           TLS_ENABLED: ${{ github.ref == 'refs/heads/main' && vars.TLS_ENABLED || vars.TLS_ENABLED_STAGE }}
+          CONFIG_VER: ${{ needs.build-and-push.outputs.image_tag }}
         with:
           host: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST || vars.DO_HOST_STAGE }}
           username: ${{ vars.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL,ENTRYPOINT,TLS_ENABLED
+          envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL,ENTRYPOINT,TLS_ENABLED, CONFIG_VER
           script: |
             set -e
             cd /opt/minitwit
@@ -167,3 +168,4 @@ jobs:
             echo "🚀 Start Deploy：${DOCKER_IMAGE}"
             docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
             docker image prune -af --filter "until=24h"
+            docker config prune -f
