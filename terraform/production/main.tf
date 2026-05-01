@@ -136,3 +136,16 @@ ansible_user=root
 EOT
   filename = "../../ansible/inventory_prod.ini"
 }
+
+resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not create anything, just run commands
+  depends_on = [
+    digitalocean_droplet.db_prod,
+    digitalocean_droplet.manager1_prod,
+    digitalocean_droplet.manager2_prod,
+    local_file.ansible_inventory
+  ]
+
+  provisioner "local-exec" {
+    command = "sleep 30 && cd ${path.module}/../../ && ansible-playbook -i ansible/inventory_prod.ini ansible/site.yml"
+  }
+}
