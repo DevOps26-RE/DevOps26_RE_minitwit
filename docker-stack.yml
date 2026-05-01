@@ -8,14 +8,18 @@ networks:
 # Declare Docker Configs
 # ==========================================
 configs:
-  prometheus_config_${CONFIG_VER}:
+  prometheus_config:
     file: ./prometheus/prometheus.yml
-  loki_config_${CONFIG_VER}:
+    name: prometheus_config_${CONFIG_VER}
+  loki_config:
     file: ./loki/loki-config.yaml
-  promtail_config_${CONFIG_VER}:
+    name: loki_config_${CONFIG_VER}
+  promtail_config:
     file: ./promtail/promtail-config.yaml
-  grafana_datasources_${CONFIG_VER}:
+    name: promtail_config_${CONFIG_VER}
+  grafana_datasources:
     file: ./grafana/datasources.yaml
+    name: grafana_datasources_${CONFIG_VER}
 
 services:
   traefik:
@@ -90,7 +94,7 @@ services:
     environment:
       - GOMEMLIMIT=240MiB
     configs:
-      - source: prometheus_config_${CONFIG_VER}
+      - source: prometheus_config
         target: /etc/prometheus/prometheus.yml
     volumes:
       - prometheus_data:/prometheus
@@ -119,7 +123,7 @@ services:
     environment:
       - GOMEMLIMIT=200MiB
     configs:
-      - source: loki_config_${CONFIG_VER}
+      - source: loki_config
         target: /etc/loki/loki-config.yaml
     volumes:
       - loki_data:/loki
@@ -140,7 +144,7 @@ services:
     environment:
       - GOMEMLIMIT=80MiB
     configs:
-      - source: promtail_config_${CONFIG_VER}
+      - source: promtail_config
         target: /etc/promtail/promtail-config.yaml
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -159,7 +163,7 @@ services:
       - GF_SERVER_ROOT_URL=${GRAFANA_URL:-https://runtimetwiterror.dev/grafana/}
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     configs:
-      - source: grafana_datasources_${CONFIG_VER}
+      - source: grafana_datasources
         target: /etc/grafana/provisioning/datasources/datasources.yaml
     volumes:
       - grafana_data:/var/lib/grafana
