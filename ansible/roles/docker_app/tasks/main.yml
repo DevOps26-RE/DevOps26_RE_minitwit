@@ -235,18 +235,15 @@
 
   # Deploy stack to swarm
 
+- name: Load .env file
+  shell: cat .env
+  register: env_file
+  changed_when: false
+
 - name: Deploy stack to swarm
-  command:   docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
-  environment:
-    DOCKER_IMAGE: "{{ DOCKER_IMAGE | default('runtimeerroritu/minitwit:latest') }}"
-    PROM_IMAGE: "{{ PROM_IMAGE | default('runtimeerroritu/minitwit-prometheus:latest') }}"
-    DB_ADDR: "{{ DB_ADDR }}"
-    DOMAIN: "{{ DOMAIN }}"
-    MANAGER1_IP: "{{ MANAGER1_IP }}"
-    MANAGER2_IP: "{{ MANAGER2_IP }}"
-    PROM_URL: "{{ PROM_URL }}"
-    GRAFANA_URL: "{{ GRAFANA_URL }}"
-    ENTRYPOINT: "{{ ENTRYPOINT }}"
-    TLS_ENABLED: "{{ TLS_ENABLED }}"
-    CONFIG_VER: "{{ CONFIG_VER }}"
+  command: docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
+  environment: "{{ env_file.stdout | from_csv_dict }}"
   when: inventory_hostname in groups['swarm_leaders']
+
+
+
