@@ -30,6 +30,25 @@ var (
 		},
 		[]string{"method", "path"},
 	)
+
+	// Counter: messages posted
+	messagesPosted = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "minitwit_messages_posted_total",
+		Help: "Total messages posted",
+	})
+
+	// Gauge: active users (current state)
+	activeUsers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "minitwit_active_users",
+		Help: "Current number of active users",
+	})
+
+	// Histogram: DB query time
+	dbQueryDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name: "minitwit_db_query_duration_seconds",
+		Help: "Database query duration",
+		Buckets: []float64{0.001, 0.01, 0.1, 1},
+	})
 )
 
 // PrometheusMiddleware records duration and request count for every route.

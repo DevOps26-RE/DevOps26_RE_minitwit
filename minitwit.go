@@ -224,6 +224,11 @@ func before_request(c *gin.Context) {
 			c.Set("user", user)
 		}
 	}
+
+	var count int64
+	db.Model(&User{}).Count(&count)
+	activeUsers.Set(float64(count))
+
 	c.Next()
 }
 
@@ -249,8 +254,10 @@ func timeline(c *gin.Context) {
 
 func public_timeline(c *gin.Context) {
 	var messages []Message
+	start := time.Now()
 	db.Preload("Author").Where("flagged = 0").
 		Order(OrderPubDateDesc).Limit(PER_PAGE).Find(&messages)
+	dbQueryDuration.Observe(time.Since(start).Seconds())
 
 	render(c, http.StatusOK, TplTimeline, gin.H{
 		"messages": messages,

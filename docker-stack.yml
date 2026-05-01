@@ -153,6 +153,25 @@ services:
         limits:
           memory: 100M
 
+  node-exporter:
+    image: prom/node-exporter:latest
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - app-net
+    deploy:
+      mode: global # Deploy on all nodes to scrape host metrics
+      resources:
+        limits:
+          memory: 100M
+
   grafana:
     image: grafana/grafana:latest
     environment:

@@ -77,8 +77,10 @@ func get_messages(c *gin.Context) {
 	numMsgs, _ := strconv.Atoi(numMsgsStr)
 
 	var msgs []Message
+	start := time.Now()
 	db.Preload("Author").Where("flagged = 0").
 		Order("pub_date DESC").Limit(numMsgs).Find(&msgs)
+	dbQueryDuration.Observe(time.Since(start).Seconds())
 
 	var messages []SimMessage
 	for _, m := range msgs {
@@ -136,6 +138,8 @@ func post_messages_per_user(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": 500, "error_msg": err.Error()})
 		return
 	}
+
+	messagesPosted.Inc()
 
 	c.Status(http.StatusNoContent)
 }
