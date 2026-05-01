@@ -167,5 +167,5 @@ jobs:
             
             echo "🚀 Start Deploy：${DOCKER_IMAGE}"
             docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
+            docker config ls -q | xargs docker config rm 2>/dev/null || true
             docker image prune -af --filter "until=24h"
-            docker config prune -f
