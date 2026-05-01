@@ -67,8 +67,8 @@ services:
           - node.labels.role == ingress
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.myweb.entrypoints=websecure"
-        - "traefik.http.routers.myweb.tls=true"
+        - "traefik.http.routers.myweb.entrypoints=${ENTRYPOINT:-websecure}"
+        - "traefik.http.routers.myweb.tls=${TLS_ENABLED:-true}"
         - "traefik.http.routers.myweb.tls.certresolver=myresolver"
         - "traefik.http.routers.myweb.rule=Host(`${DOMAIN}`)"
         - "traefik.http.services.myweb.loadbalancer.server.port=5001"
@@ -106,8 +106,8 @@ services:
           memory: 300M
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.myprom.entrypoints=websecure"
-        - "traefik.http.routers.myprom.tls=true"
+        - "traefik.http.routers.myprom.entrypoints=${ENTRYPOINT:-websecure}"
+        - "traefik.http.routers.myprom.tls=${TLS_ENABLED:-true}"
         - "traefik.http.routers.myprom.tls.certresolver=myresolver"
         - "traefik.http.routers.myprom.rule=Host(`${DOMAIN}`) && PathPrefix(`/prometheus`)"
         - "traefik.http.services.myprom.loadbalancer.server.port=9090"
@@ -177,8 +177,8 @@ services:
           memory: 256M
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.mygrafana.entrypoints=websecure"
-        - "traefik.http.routers.mygrafana.tls=true"
+        - "traefik.http.routers.mygrafana.entrypoints=${ENTRYPOINT:-websecure}"
+        - "traefik.http.routers.mygrafana.tls=${TLS_ENABLED:-true}"
         - "traefik.http.routers.mygrafana.tls.certresolver=myresolver"
         - "traefik.http.routers.mygrafana.rule=Host(`${DOMAIN}`) && PathPrefix(`/grafana`)"
         - "traefik.http.services.mygrafana.loadbalancer.server.port=3000"

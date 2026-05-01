@@ -153,11 +153,13 @@ jobs:
           MANAGER2_IP: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST_2 || vars.DO_HOST_2_STAGE }}
           PROM_URL: ${{ github.ref == 'refs/heads/main' && 'https://' || 'http://' }}${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/prometheus
           GRAFANA_URL: ${{ github.ref == 'refs/heads/main' && 'https://' || 'http://' }}${{ github.ref == 'refs/heads/main' && vars.DOMAIN || vars.DOMAIN_STAGE }}/grafana/
+          ENTRYPOINT: ${{ github.ref == 'refs/heads/main' && vars.ENTRYPOINT || vars.ENTRYPOINT_STAGE }}
+          TLS_ENABLED: ${{ github.ref == 'refs/heads/main' && vars.TLS_ENABLED || vars.TLS_ENABLED_STAGE }}
         with:
           host: ${{ github.ref == 'refs/heads/main' && vars.DO_HOST || vars.DO_HOST_STAGE }}
           username: ${{ vars.DO_USER }}
           key: ${{ github.ref == 'refs/heads/main' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGE }}
-          envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL
+          envs: SECRET_KEY,DB_ADDR,DOCKER_IMAGE,DOMAIN,MANAGER1_IP,MANAGER2_IP,PROM_URL,GRAFANA_URL,ENTRYPOINT,TLS_ENABLED
           script: |
             set -e
             cd /opt/minitwit
