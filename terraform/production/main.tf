@@ -149,3 +149,38 @@ resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not
     command = "sleep 30 && cd ${path.module}/../../ && ansible-playbook -i ansible/inventory_prod.ini ansible/site.yml"
   }
 }
+
+# --- Get Private IPs from VPC ---
+resource "null_resource" "get_private_ips" {
+  depends_on = [
+    digitalocean_droplet.db_prod,
+    digitalocean_droplet.manager1_prod,
+    digitalocean_droplet.manager2_prod
+  ]
+}
+
+# --- Generate .env file with dynamic IPs ---
+resource "local_file" "env_file" {
+  content = <<EOT
+DIGITAL_OCEAN_TOKEN=${var.do_token}
+SSH_KEY_NAME=${var.ssh_key_name}
+CONFIG_VER=1.0
+TLS_ENABLED=false
+DOCKER_IMAGE=runtimeerroritu/minitwit:latest
+PROM_IMAGE=runtimeerroritu/minitwit-prometheus:latest
+DB_ADDR=${digitalocean_droplet.db_prod.networks[1].ipv4_address}
+DOMAIN=${digitalocean_droplet.manager1_prod.ipv4_address}
+MANAGER1_IP=${digitalocean_droplet.manager1_prod.ipv4_address}
+MANAGER2_IP=${digitalocean_droplet.manager2_prod.ipv4_address}
+PROM_URL=https://${var.domain}/prometheus
+GRAFANA_URL=https://${var.domain}/grafana/
+ENTRYPOINT=web
+EOT
+  filename = "../../.env"
+  
+  depends_on = [
+    digitalocean_droplet.db_prod,
+    digitalocean_droplet.manager1_prod,
+    digitalocean_droplet.manager2_prod
+  ]
+}

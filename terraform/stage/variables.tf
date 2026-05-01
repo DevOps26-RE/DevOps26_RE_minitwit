@@ -10,3 +10,8 @@ variable "ssh_key_name" {
   description = "Name of the SSH key in DigitalOcean"
   type        = string
 }
+# Domain name for the application
+variable "domain" {
+  description = "Domain name for the application"
+  type        = string
+}
