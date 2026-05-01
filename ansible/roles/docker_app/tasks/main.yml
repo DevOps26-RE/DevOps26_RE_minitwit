@@ -201,49 +201,79 @@
 # DB server tasks (runs on leader_swarm)
 ##################################################
 
+- name: Create db directory
+  file:
+    path: /root/db
+    state: directory
+    mode: '0755'
+  when: inventory_hostname in groups['swarm_leaders']
 
-- name: Deploy Docker Compose on DB Server
-  hosts: swarm_leaders
-  become: true
-  tasks:
-    - name: Create db directory
-      file:
-        path: /root/db
-        state: directory
-        mode: '0755'
-      when: inventory_hostname in groups['swarm_leaders']
+- name: Copy docker-compose-db.yaml to DB server
+  copy:
+    src: ../../../docker-compose-db.yaml
+    dest: /root/docker-compose-db.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['swarm_leaders']
 
-    - name: Copy docker-compose-db.yaml to DB server
-      copy:
-        src: ../docker-compose-db.yaml
-        dest: /root/docker-compose-db.yaml
-        owner: root
-        group: root
-        mode: '0644'
-      when: inventory_hostname in groups['swarm_leaders']
+- name: Start Docker Compose containers
+  command: docker compose -f /root/docker-compose-db.yaml up -d
+  register: compose_result
+  changed_when: "'Started' in compose_result.stdout or 'created' in compose_result.stdout"
+  when: inventory_hostname in groups['swarm_leaders']
 
-    - name: Start Docker Compose containers
-      command: docker compose -f /root/docker-compose-db.yaml up -d
-      register: compose_result
-      changed_when: "'Started' in compose_result.stdout or 'created' in compose_result.stdout"
-      when: inventory_hostname in groups['swarm_leaders']
+- name: Display Docker Compose result
+  debug:
+    msg: "{{ compose_result.stdout }}"
+  when: inventory_hostname in groups['swarm_leaders']
 
-    - name: Display Docker Compose result
-      debug:
-        msg: "{{ compose_result.stdout }}"
-      when: inventory_hostname in groups['swarm_leaders']
+##################################################
+# App stack deploy (runs on leader_swarm after swarm is ready)
+##################################################
 
-  # Deploy stack to swarm
+- name: Create application directory
+  file:
+    path: /opt/minitwit
+    state: directory
+    mode: '0755'
+  when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
+
+- name: Create config directories
+  file:
+    path: "/opt/minitwit/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - prometheus
+    - loki
+    - promtail
+    - grafana
+  when: inventory_hostname in groups['swarm_leaders']
+
+##################################################
+# Load environment and deploy stack
+##################################################
 
 - name: Load .env file
-  shell: cat .env
+  shell: cat /root/.env
   register: env_file
   changed_when: false
+  when: inventory_hostname in groups['swarm_leaders']
+  ignore_errors: true
+
+- name: Parse .env file into dict
+  set_fact:
+    env_dict: "{{ env_dict | default({}) | combine({item.split('=')[0]: item.split('=')[1]}) }}"
+  loop: "{{ env_file.stdout_lines }}"
+  when:
+    - inventory_hostname in groups['swarm_leaders']
+    - env_file.stdout_lines is defined
+    - item != ''
+    - '"=" in item'
 
 - name: Deploy stack to swarm
   command: docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
-  environment: "{{ env_file.stdout | from_csv_dict }}"
+  environment: "{{ env_dict | default({}) }}"
   when: inventory_hostname in groups['swarm_leaders']
-
-
-
