@@ -168,12 +168,12 @@ CONFIG_VER=1.0
 TLS_ENABLED=false
 DOCKER_IMAGE=runtimeerroritu/minitwit:latest
 PROM_IMAGE=runtimeerroritu/minitwit-prometheus:latest
-DB_ADDR=${digitalocean_droplet.db_prod.networks[1].ipv4_address}
+DB_ADDR=${digitalocean_droplet.db_prod.ipv4_address_private}
 DOMAIN=${digitalocean_droplet.manager1_prod.ipv4_address}
 MANAGER1_IP=${digitalocean_droplet.manager1_prod.ipv4_address}
 MANAGER2_IP=${digitalocean_droplet.manager2_prod.ipv4_address}
-PROM_URL=https://${var.domain}/prometheus
-GRAFANA_URL=https://${var.domain}/grafana/
+PROM_URL=${digitalocean_droplet.manager1_prod.ipv4_address}/prometheus
+GRAFANA_URL=${digitalocean_droplet.manager1_prod.ipv4_address}/grafana/
 ENTRYPOINT=web
 EOT
   filename = "../../.env"
