@@ -246,4 +246,7 @@
     MANAGER2_IP: "{{ MANAGER2_IP }}"
     PROM_URL: "{{ PROM_URL }}"
     GRAFANA_URL: "{{ GRAFANA_URL }}"
+    ENTRYPOINT: "{{ ENTRYPOINT }}"
+    TLS_ENABLED: "{{ TLS_ENABLED }}"
+    CONFIG_VER: "{{ CONFIG_VER }}"
   when: inventory_hostname in groups['swarm_leaders']
