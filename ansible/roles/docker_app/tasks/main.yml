@@ -172,16 +172,6 @@
   when: inventory_hostname not in groups['swarm_leaders']
   ignore_errors: true
 
-##################################################
-# DB server tasks (runs on leader_swarm)
-##################################################
-
-- name: Create db data directory
-  file:
-    path: /root/db
-    state: directory
-    mode: '0755'
-  when: inventory_hostname in groups['swarm_leaders']
 
 ##################################################
 # App stack deploy (runs on leader_swarm after swarm is ready)
@@ -192,7 +182,7 @@
     path: /opt/minitwit
     state: directory
     mode: '0755'
-  when: inventory_hostname in groups['swarm_leaders']
+  when: inventory_hostname in groups['swarm_managers']
   no_log: true
 
 - name: Create config directories
@@ -205,4 +195,55 @@
     - loki
     - promtail
     - grafana
+  when: inventory_hostname in groups['swarm_leaders']
+
+##################################################
+# DB server tasks (runs on leader_swarm)
+##################################################
+
+
+- name: Deploy Docker Compose on DB Server
+  hosts: swarm_leaders
+  become: true
+  tasks:
+    - name: Create db directory
+      file:
+        path: /root/db
+        state: directory
+        mode: '0755'
+      when: inventory_hostname in groups['swarm_leaders']
+
+    - name: Copy docker-compose-db.yaml to DB server
+      copy:
+        src: ../docker-compose-db.yaml
+        dest: /root/docker-compose-db.yaml
+        owner: root
+        group: root
+        mode: '0644'
+      when: inventory_hostname in groups['swarm_leaders']
+
+    - name: Start Docker Compose containers
+      command: docker compose -f /root/docker-compose-db.yaml up -d
+      register: compose_result
+      changed_when: "'Started' in compose_result.stdout or 'created' in compose_result.stdout"
+      when: inventory_hostname in groups['swarm_leaders']
+
+    - name: Display Docker Compose result
+      debug:
+        msg: "{{ compose_result.stdout }}"
+      when: inventory_hostname in groups['swarm_leaders']
+
+  # Deploy stack to swarm
+
+- name: Deploy stack to swarm
+  command:   docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
+  environment:
+    DOCKER_IMAGE: "{{ DOCKER_IMAGE | default('runtimeerroritu/minitwit:latest') }}"
+    PROM_IMAGE: "{{ PROM_IMAGE | default('runtimeerroritu/minitwit-prometheus:latest') }}"
+    DB_ADDR: "{{ DB_ADDR }}"
+    DOMAIN: "{{ DOMAIN }}"
+    MANAGER1_IP: "{{ MANAGER1_IP }}"
+    MANAGER2_IP: "{{ MANAGER2_IP }}"
+    PROM_URL: "{{ PROM_URL }}"
+    GRAFANA_URL: "{{ GRAFANA_URL }}"
   when: inventory_hostname in groups['swarm_leaders']
