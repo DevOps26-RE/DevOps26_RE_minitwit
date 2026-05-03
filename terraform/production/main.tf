@@ -159,7 +159,7 @@ resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not
       fi
 
       if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new root@"$FIRST_HOST_IP" true >/dev/null 2>&1; then
-        ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" site.yml
+        ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" -e stack_env_file=../.env site.yml
         exit $?
       fi
 
@@ -182,7 +182,7 @@ resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not
       fi
 
       echo "Using SSH key: $KEY_FOUND"
-      ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" --private-key "$KEY_FOUND" site.yml
+      ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" --private-key "$KEY_FOUND" -e stack_env_file=../.env site.yml
     EOT
   }
 }
