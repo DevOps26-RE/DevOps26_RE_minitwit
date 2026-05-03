@@ -66,3 +66,4 @@ CLAUDE.md
 # === Ansible ===
 ansible/*.ini
 *.retry
+.env.stage

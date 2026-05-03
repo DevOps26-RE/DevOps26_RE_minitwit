@@ -63,7 +63,7 @@ resource "digitalocean_droplet" "db_prod" {
 }
 
 resource "digitalocean_firewall" "minitwit_fw" {
-  name = "minitwit-stage-firewall"
+  name = "minitwit-prod-firewall"
   tags = [digitalocean_tag.minitwit_prod.id]
 
   inbound_rule {
@@ -159,7 +159,7 @@ resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not
       fi
 
       if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new root@"$FIRST_HOST_IP" true >/dev/null 2>&1; then
-        ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" -e stack_env_file=../.env site.yml
+        ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" -e stack_env_file=../.env.prod site.yml
         exit $?
       fi
 
@@ -182,7 +182,7 @@ resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not
       fi
 
       echo "Using SSH key: $KEY_FOUND"
-      ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" --private-key "$KEY_FOUND" -e stack_env_file=../.env site.yml
+      ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" --private-key "$KEY_FOUND" -e stack_env_file=../.env.prod site.yml
     EOT
   }
 }
@@ -199,26 +199,18 @@ resource "null_resource" "get_private_ips" {
 # --- Generate .env file with dynamic IPs ---
 resource "local_file" "env_file" {
   content  = <<EOT
-DIGITAL_OCEAN_TOKEN=${var.do_token}
-SSH_KEY_NAME=${var.ssh_key_name}
-CONFIG_VER=1.0
-TLS_ENABLED=false
 DOCKER_IMAGE=runtimeerroritu/minitwit:latest
-PROM_IMAGE=runtimeerroritu/minitwit-prometheus:latest
 DB_ADDR=${digitalocean_droplet.db_prod.ipv4_address_private}
 
-# Use nip.io to create a magic domain for the staging environment using the Public IP
-DOMAIN=${digitalocean_droplet.manager1_prod.ipv4_address}.nip.io
+DOMAIN=runtimetwiterror.dev
 
 MANAGER1_IP=${digitalocean_droplet.manager1_prod.ipv4_address}
 MANAGER2_IP=${digitalocean_droplet.manager2_prod.ipv4_address}
 
-# Update URLs to use the new nip.io domain
-PROM_URL=http://${digitalocean_droplet.manager1_prod.ipv4_address}.nip.io/prometheus
-GRAFANA_URL=http://${digitalocean_droplet.manager1_prod.ipv4_address}.nip.io/grafana/
-ENTRYPOINT=web
+PROM_URL=https://runtimetwiterror.dev/prometheus
+GRAFANA_URL=https://runtimetwiterror.dev/grafana/
 EOT
-  filename = "../../.env"
+  filename = "../../.env.prod"
 
   depends_on = [
     digitalocean_droplet.db_prod,

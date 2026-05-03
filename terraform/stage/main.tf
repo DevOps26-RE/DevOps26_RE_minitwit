@@ -1,5 +1,5 @@
 # ==========================================================================
-# Terraform Configuration for Minitwit - STAGE Environment
+# Terraform Configuration for Minitwit - STAGING Environment
 # ==========================================================================
 
 terraform {
@@ -26,7 +26,7 @@ resource "digitalocean_tag" "minitwit_stage" {
 resource "digitalocean_vpc" "minitwit_vpc" {
   name     = "minitwit-stage-vpc"
   region   = "fra1"
-  ip_range = "10.10.10.0/24"
+  ip_range = "10.10.20.0/24"
 }
 
 # --- Manager 1 ---
@@ -159,7 +159,7 @@ resource "null_resource" "run_ansible_stage" { # null_resource is a TYPE does no
       fi
 
       if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new root@"$FIRST_HOST_IP" true >/dev/null 2>&1; then
-        ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" -e stack_env_file=../.env_staging site.yml
+        ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" -e stack_env_file=../.env.stage site.yml
         exit $?
       fi
 
@@ -182,7 +182,7 @@ resource "null_resource" "run_ansible_stage" { # null_resource is a TYPE does no
       fi
 
       echo "Using SSH key: $KEY_FOUND"
-      ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" --private-key "$KEY_FOUND" -e stack_env_file=../.env_staging site.yml
+      ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" -e stack_env_file=../.env.stage site.yml
     EOT
   }
 }
@@ -199,21 +199,20 @@ resource "null_resource" "get_private_ips" {
 # --- Generate .env file with dynamic IPs ---
 resource "local_file" "env_file" {
   content  = <<EOT
-DIGITAL_OCEAN_TOKEN=${var.do_token}
-SSH_KEY_NAME=${var.ssh_key_name}
-CONFIG_VER=1.0
-TLS_ENABLED=false
 DOCKER_IMAGE=runtimeerroritu/minitwit:latest
-PROM_IMAGE=runtimeerroritu/minitwit-prometheus:latest
 DB_ADDR=${digitalocean_droplet.db_stage.ipv4_address_private}
-DOMAIN=${var.domain}
+
+# Use nip.io to create a magic domain for the staging environment using the Public IP
+DOMAIN=${digitalocean_droplet.manager1_stage.ipv4_address}.nip.io
+
 MANAGER1_IP=${digitalocean_droplet.manager1_stage.ipv4_address}
 MANAGER2_IP=${digitalocean_droplet.manager2_stage.ipv4_address}
-PROM_URL=https://${var.domain}/prometheus
-GRAFANA_URL=https://${var.domain}/grafana/
-ENTRYPOINT=web
+
+# Update URLs to use the new nip.io domain
+PROM_URL=http://${digitalocean_droplet.manager1_stage.ipv4_address}.nip.io/prometheus
+GRAFANA_URL=http://${digitalocean_droplet.manager1_stage.ipv4_address}.nip.io/grafana/
 EOT
-  filename = "../../.env_staging"
+  filename = "../../.env.stage"
 
   depends_on = [
     digitalocean_droplet.db_stage,
