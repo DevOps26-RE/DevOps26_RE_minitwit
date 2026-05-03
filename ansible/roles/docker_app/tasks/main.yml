@@ -141,7 +141,7 @@
 ##################################################
 
 - name: Init swarm on leader_swarm
-  command: docker swarm init --advertise-addr {{ ansible_eth1.ipv4.address }}
+  command: docker swarm init --advertise-addr {{ ansible_eth1.ipv4.address }} --data-path-addr {{ ansible_eth1.ipv4.address }}
   when: inventory_hostname in groups['swarm_leaders']
   ignore_errors: true
 
@@ -155,6 +155,8 @@
   command: >
     docker swarm join
     --token {{ hostvars[groups['swarm_leaders'][0]]['manager_token']['stdout'] }}
+    --advertise-addr {{ ansible_eth1.ipv4.address }}
+    --data-path-addr {{ ansible_eth1.ipv4.address }}
     {{ hostvars[groups['swarm_leaders'][0]]['ansible_eth1']['ipv4']['address'] }}:2377
   when:
     - inventory_hostname not in groups['swarm_leaders']
@@ -172,15 +174,60 @@
   when: inventory_hostname not in groups['swarm_leaders']
   ignore_errors: true
 
+
+##################################################
+# App stack deploy (runs on leader_swarm after swarm is ready)
+##################################################
+
+- name: Create application directory
+  file:
+    path: /opt/minitwit
+    state: directory
+    mode: '0755'
+  when: inventory_hostname in groups['swarm_managers']
+  no_log: true
+
+- name: Create config directories
+  file:
+    path: "/opt/minitwit/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - prometheus
+    - loki
+    - promtail
+    - grafana
+  when: inventory_hostname in groups['swarm_leaders']
+
 ##################################################
 # DB server tasks (runs on leader_swarm)
 ##################################################
 
-- name: Create db data directory
+- name: Create db directory
   file:
     path: /root/db
     state: directory
     mode: '0755'
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Copy docker-compose-db.yaml to DB server
+  copy:
+    src: "{{ playbook_dir }}/../docker-compose-db.yaml"
+    dest: /root/docker-compose-db.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Start Docker Compose containers
+  command: docker compose -f /root/docker-compose-db.yaml up -d
+  register: compose_result
+  changed_when: "'Started' in compose_result.stdout or 'created' in compose_result.stdout"
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Display Docker Compose result
+  debug:
+    msg: "{{ compose_result.stdout }}"
   when: inventory_hostname in groups['swarm_leaders']
 
 ##################################################
@@ -205,4 +252,63 @@
     - loki
     - promtail
     - grafana
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Copy stack definition to leader
+  copy:
+    src: "{{ playbook_dir }}/../docker-stack.yml"
+    dest: /opt/minitwit/docker-stack.yml
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Copy stack config files to leader
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - { src: "{{ playbook_dir }}/../prometheus/prometheus.yml", dest: "/opt/minitwit/prometheus/prometheus.yml" }
+    - { src: "{{ playbook_dir }}/../loki/loki-config.yaml", dest: "/opt/minitwit/loki/loki-config.yaml" }
+    - { src: "{{ playbook_dir }}/../promtail/promtail-config.yaml", dest: "/opt/minitwit/promtail/promtail-config.yaml" }
+    - { src: "{{ playbook_dir }}/../grafana/datasources.yaml", dest: "/opt/minitwit/grafana/datasources.yaml" }
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Copy environment file to leader
+  copy:
+    src: "{{ playbook_dir }}/{{ stack_env_file | default('../.env') }}"
+    dest: /opt/minitwit/.env
+    owner: root
+    group: root
+    mode: '0600'
+  when: inventory_hostname in groups['swarm_leaders']
+
+##################################################
+# Load environment and deploy stack
+##################################################
+
+- name: Load .env file
+  shell: cat /opt/minitwit/.env
+  register: env_file
+  changed_when: false
+  when: inventory_hostname in groups['swarm_leaders']
+
+- name: Parse .env file into dict
+  set_fact:
+    env_dict: "{{ env_dict | default({}) | combine({item.split('=')[0]: item.split('=')[1]}) }}"
+  loop: "{{ env_file.stdout_lines }}"
+  when:
+    - inventory_hostname in groups['swarm_leaders']
+    - env_file.stdout_lines is defined
+    - item != ''
+    - '"=" in item'
+
+- name: Deploy stack to swarm
+  command: docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
+  args:
+    chdir: /opt/minitwit
+  environment: "{{ env_dict | default({}) }}"
   when: inventory_hostname in groups['swarm_leaders']

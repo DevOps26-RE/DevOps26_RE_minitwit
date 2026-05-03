@@ -63,7 +63,7 @@ resource "digitalocean_droplet" "db_prod" {
 }
 
 resource "digitalocean_firewall" "minitwit_fw" {
-  name = "minitwit-stage-firewall"
+  name = "minitwit-prod-firewall"
   tags = [digitalocean_tag.minitwit_prod.id]
 
   inbound_rule {
@@ -123,7 +123,7 @@ resource "digitalocean_firewall" "minitwit_fw" {
 
 # --- Generate Ansible Inventory ---
 resource "local_file" "ansible_inventory" {
-  content = <<EOT
+  content  = <<EOT
 [swarm_leaders]
 db-prod ansible_host=${digitalocean_droplet.db_prod.ipv4_address}
 
@@ -135,4 +135,86 @@ manager2-prod ansible_host=${digitalocean_droplet.manager2_prod.ipv4_address}
 ansible_user=root
 EOT
   filename = "../../ansible/inventory_prod.ini"
+}
+
+resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not create anything, just run commands
+  depends_on = [
+    digitalocean_droplet.db_prod,
+    digitalocean_droplet.manager1_prod,
+    digitalocean_droplet.manager2_prod,
+    local_file.ansible_inventory
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      sleep 30
+      cd ${path.module}/../../ansible
+
+      INVENTORY="inventory_prod.ini"
+      FIRST_HOST_IP=$(awk -F'ansible_host=' '/ansible_host=/{print $2; exit}' "$INVENTORY")
+
+      if [ -z "$FIRST_HOST_IP" ]; then
+        echo "Could not extract a host IP from $INVENTORY"
+        exit 1
+      fi
+
+      if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new root@"$FIRST_HOST_IP" true >/dev/null 2>&1; then
+        ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" -e stack_env_file=../.env.prod site.yml
+        exit $?
+      fi
+
+      KEY_FOUND=""
+      for key in "$HOME"/.ssh/*; do
+        [ -f "$key" ] || continue
+        case "$key" in
+          *.pub|*.crt|*.cert|*known_hosts*|*authorized_keys|*/config) continue ;;
+        esac
+
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -i "$key" root@"$FIRST_HOST_IP" true >/dev/null 2>&1; then
+          KEY_FOUND="$key"
+          break
+        fi
+      done
+
+      if [ -z "$KEY_FOUND" ]; then
+        echo "No working SSH private key found for $FIRST_HOST_IP. Ensure the matching private key is in ~/.ssh or loaded in ssh-agent."
+        exit 1
+      fi
+
+      echo "Using SSH key: $KEY_FOUND"
+      ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" --private-key "$KEY_FOUND" -e stack_env_file=../.env.prod site.yml
+    EOT
+  }
+}
+
+# --- Get Private IPs from VPC ---
+resource "null_resource" "get_private_ips" {
+  depends_on = [
+    digitalocean_droplet.db_prod,
+    digitalocean_droplet.manager1_prod,
+    digitalocean_droplet.manager2_prod
+  ]
+}
+
+# --- Generate .env file with dynamic IPs ---
+resource "local_file" "env_file" {
+  content  = <<EOT
+DOCKER_IMAGE=runtimeerroritu/minitwit:latest
+DB_ADDR=${digitalocean_droplet.db_prod.ipv4_address_private}
+
+DOMAIN=runtimetwiterror.dev
+
+MANAGER1_IP=${digitalocean_droplet.manager1_prod.ipv4_address}
+MANAGER2_IP=${digitalocean_droplet.manager2_prod.ipv4_address}
+
+PROM_URL=https://runtimetwiterror.dev/prometheus
+GRAFANA_URL=https://runtimetwiterror.dev/grafana/
+EOT
+  filename = "../../.env.prod"
+
+  depends_on = [
+    digitalocean_droplet.db_prod,
+    digitalocean_droplet.manager1_prod,
+    digitalocean_droplet.manager2_prod
+  ]
 }

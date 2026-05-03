@@ -4,9 +4,6 @@ networks:
   app-net:
     driver: overlay
 
-# ==========================================
-# Declare Docker Configs
-# ==========================================
 configs:
   prometheus_config:
     file: ./prometheus/prometheus.yml
@@ -26,6 +23,8 @@ services:
       - "--providers.swarm=true"
       - "--providers.swarm.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=aile@itu.dk"
@@ -73,11 +72,6 @@ services:
         - "traefik.http.routers.myweb.rule=Host(`${DOMAIN}`)"
         - "traefik.http.services.myweb.loadbalancer.server.port=5001"
         - "traefik.docker.network=minitwit_app-net"
-        - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-        - "traefik.http.routers.myweb-http.entrypoints=web"
-        - "traefik.http.routers.myweb-http.rule=Host(`${DOMAIN}`)"
-        - "traefik.http.routers.myweb-http.middlewares=redirect-to-https"
-        - "traefik.http.routers.myweb-http.priority=1"
         - "traefik.http.routers.simulator.entrypoints=web"
         - "traefik.http.routers.simulator.rule=Host(`${MANAGER1_IP}`) || Host(`${MANAGER2_IP}`)"
 
@@ -97,7 +91,6 @@ services:
     networks:
       - app-net
     deploy:
-      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
@@ -126,7 +119,6 @@ services:
     networks:
       - app-net
     deploy:
-      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
@@ -148,7 +140,7 @@ services:
     networks:
       - app-net
     deploy:
-      mode: global # Deploy on all nodes to collect logs globally
+      mode: global
       resources:
         limits:
           memory: 100M
@@ -166,7 +158,6 @@ services:
     networks:
       - app-net
     deploy:
-      endpoint_mode: dnsrr
       placement:
         constraints:
           - node.labels.role == monitoring
