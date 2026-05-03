@@ -123,7 +123,7 @@ resource "digitalocean_firewall" "minitwit_fw" {
 
 # --- Generate Ansible Inventory ---
 resource "local_file" "ansible_inventory" {
-  content = <<EOT
+  content  = <<EOT
 [swarm_leaders]
 db-stage ansible_host=${digitalocean_droplet.db_stage.ipv4_address}
 
@@ -146,7 +146,44 @@ resource "null_resource" "run_ansible_stage" { # null_resource is a TYPE does no
   ]
 
   provisioner "local-exec" {
-    command = "sleep 30 && cd ${path.module}/../../ && ansible-playbook -i ansible/inventory_stage.ini ansible/site.yml"
+    command = <<-EOT
+      sleep 30
+      cd ${path.module}/../../ansible
+
+      INVENTORY="inventory_stage.ini"
+      FIRST_HOST_IP=$(awk -F'ansible_host=' '/ansible_host=/{print $2; exit}' "$INVENTORY")
+
+      if [ -z "$FIRST_HOST_IP" ]; then
+        echo "Could not extract a host IP from $INVENTORY"
+        exit 1
+      fi
+
+      if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new root@"$FIRST_HOST_IP" true >/dev/null 2>&1; then
+        ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" site.yml
+        exit $?
+      fi
+
+      KEY_FOUND=""
+      for key in "$HOME"/.ssh/*; do
+        [ -f "$key" ] || continue
+        case "$key" in
+          *.pub|*.crt|*.cert|*known_hosts*|*authorized_keys|*/config) continue ;;
+        esac
+
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -i "$key" root@"$FIRST_HOST_IP" true >/dev/null 2>&1; then
+          KEY_FOUND="$key"
+          break
+        fi
+      done
+
+      if [ -z "$KEY_FOUND" ]; then
+        echo "No working SSH private key found for $FIRST_HOST_IP. Ensure the matching private key is in ~/.ssh or loaded in ssh-agent."
+        exit 1
+      fi
+
+      echo "Using SSH key: $KEY_FOUND"
+      ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i "$INVENTORY" --private-key "$KEY_FOUND" site.yml
+    EOT
   }
 }
 
@@ -161,7 +198,7 @@ resource "null_resource" "get_private_ips" {
 
 # --- Generate .env file with dynamic IPs ---
 resource "local_file" "env_file" {
-  content = <<EOT
+  content  = <<EOT
 DIGITAL_OCEAN_TOKEN=${var.do_token}
 SSH_KEY_NAME=${var.ssh_key_name}
 CONFIG_VER=1.0
@@ -177,7 +214,7 @@ GRAFANA_URL=https://${var.domain}/grafana/
 ENTRYPOINT=web
 EOT
   filename = "../../.env_staging"
-  
+
   depends_on = [
     digitalocean_droplet.db_stage,
     digitalocean_droplet.manager1_stage,
