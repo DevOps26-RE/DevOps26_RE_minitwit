@@ -271,10 +271,10 @@
     group: root
     mode: '0644'
   loop:
-    - { src: "{{ playbook_dir }}/../prometheus/prometheus.yml", dest: "/opt/minitwit/prometheus/prometheus.yml" }
-    - { src: "{{ playbook_dir }}/../loki/loki-config.yaml", dest: "/opt/minitwit/loki/loki-config.yaml" }
-    - { src: "{{ playbook_dir }}/../promtail/promtail-config.yaml", dest: "/opt/minitwit/promtail/promtail-config.yaml" }
-    - { src: "{{ playbook_dir }}/../grafana/datasources.yaml", dest: "/opt/minitwit/grafana/datasources.yaml" }
+    - {src: "{{playbook_dir}}/../prometheus/prometheus.yml", dest: "/opt/minitwit/prometheus/prometheus.yml"}
+    - {src: "{{playbook_dir}}/../loki/loki-config.yaml", dest: "/opt/minitwit/loki/loki-config.yaml"}
+    - {src: "{{playbook_dir}}/../promtail/promtail-config.yaml", dest: "/opt/minitwit/promtail/promtail-config.yaml"}
+    - {src: "{{playbook_dir}}/../grafana/datasources.yaml", dest: "/opt/minitwit/grafana/datasources.yaml"}
   when: inventory_hostname in groups['swarm_leaders']
 
 - name: Copy environment file to leader
