@@ -206,11 +206,16 @@ TLS_ENABLED=false
 DOCKER_IMAGE=runtimeerroritu/minitwit:latest
 PROM_IMAGE=runtimeerroritu/minitwit-prometheus:latest
 DB_ADDR=${digitalocean_droplet.db_prod.ipv4_address_private}
-DOMAIN=${digitalocean_droplet.manager1_prod.ipv4_address}
+
+# Use nip.io to create a magic domain for the staging environment using the Public IP
+DOMAIN=${digitalocean_droplet.manager1_prod.ipv4_address}.nip.io
+
 MANAGER1_IP=${digitalocean_droplet.manager1_prod.ipv4_address}
 MANAGER2_IP=${digitalocean_droplet.manager2_prod.ipv4_address}
-PROM_URL=${digitalocean_droplet.manager1_prod.ipv4_address}/prometheus
-GRAFANA_URL=${digitalocean_droplet.manager1_prod.ipv4_address}/grafana/
+
+# Update URLs to use the new nip.io domain
+PROM_URL=http://${digitalocean_droplet.manager1_prod.ipv4_address}.nip.io/prometheus
+GRAFANA_URL=http://${digitalocean_droplet.manager1_prod.ipv4_address}.nip.io/grafana/
 ENTRYPOINT=web
 EOT
   filename = "../../.env"

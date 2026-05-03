@@ -141,7 +141,7 @@
 ##################################################
 
 - name: Init swarm on leader_swarm
-  command: docker swarm init --advertise-addr {{ ansible_eth1.ipv4.address }}
+  command: docker swarm init --advertise-addr {{ ansible_eth1.ipv4.address }} --data-path-addr {{ ansible_eth1.ipv4.address }}
   when: inventory_hostname in groups['swarm_leaders']
   ignore_errors: true
 
@@ -155,6 +155,8 @@
   command: >
     docker swarm join
     --token {{ hostvars[groups['swarm_leaders'][0]]['manager_token']['stdout'] }}
+    --advertise-addr {{ ansible_eth1.ipv4.address }}
+    --data-path-addr {{ ansible_eth1.ipv4.address }}
     {{ hostvars[groups['swarm_leaders'][0]]['ansible_eth1']['ipv4']['address'] }}:2377
   when:
     - inventory_hostname not in groups['swarm_leaders']
