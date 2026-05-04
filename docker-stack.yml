@@ -75,6 +75,20 @@ services:
         - "traefik.http.routers.simulator.entrypoints=web"
         - "traefik.http.routers.simulator.rule=Host(`${MANAGER1_IP}`) || Host(`${MANAGER2_IP}`)"
 
+  node_exporter:
+    image: prom/node-exporter:latest
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - app-net
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 64M
+
   prometheus:
     image: prom/prometheus:v3.10.0
     command:
