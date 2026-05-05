@@ -5,7 +5,7 @@ networks:
     driver: overlay
 
 configs:
-  prometheus_config:
+  prometheus_config_v2:
     file: ./prometheus/prometheus.yml
   loki_config:
     file: ./loki/loki-config.yaml
@@ -97,7 +97,7 @@ services:
     environment:
       - GOMEMLIMIT=240MiB
     configs:
-      - source: prometheus_config
+      - source: prometheus_config_v2
         target: /etc/prometheus/prometheus.yml
     volumes:
       - prometheus_data:/prometheus
