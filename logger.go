@@ -39,7 +39,8 @@ func LoggingMiddleware() gin.HandlerFunc {
 			route = "unmatched"
 		}
 
-		jsonLogger.Info("request",
+		jsonLogger.Info(
+			"request",
 			slog.String("method", c.Request.Method),
 			slog.String("path", c.Request.URL.Path),
 			slog.String("route", route),
