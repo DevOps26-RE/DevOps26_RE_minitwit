@@ -1,155 +1,238 @@
-# DevOps26_RE_minitwit
+# DevOps26 RE MiniTwit
 
-This repository contains a Go implementation of the MiniTwit application, designed for the ITU DevOps course. The project features a containerized development environment, automated cloud deployment on DigitalOcean, and a modern Infrastructure as Code (IaC) approach.
+## Description / Overview
 
-## 🚀 Public Access
+**DevOps26 RE MiniTwit** is a production-style microblogging stack for the **ITU DevOps** course: 
 
-The application is deployed as a Docker Swarm stack and is reachable at:
+- **MiniTwit** in **Go** (Gin) with sessions and HTML templates,**PostgreSQL** via **GORM AutoMigrate**, a **simulator-compatible HTTP API**, and **Docker Swarm** on **DigitalOcean**.
+- Observability uses **Prometheus**, **Loki**, **Grafana**, and **Promtail**. 
+- **Terraform** provisions the VPC, firewalls, and droplets; **Ansible** installs Docker Engine, bootstraps Swarm, and deploys the stack. 
+- **GitHub Actions** runs lint and tests, builds images, and deploys to **staging** (pull requests) or **production** (`main`).
 
-| Service | URL |
-| :--- | :--- |
-| **MiniTwit Web UI** | [http://runtimetwiterror.dev](http://runtimetwiterror.dev) |
-| **Simulator API** | [http://runtimetwiterror.dev/api](http://runtimetwiterror.dev/api) |
-| **Prometheus** | [http://runtimetwiterror.dev/prometheus](http://runtimetwiterror.dev/prometheus) |
-| **Grafana** | [http://runtimetwiterror.dev/grafana](http://runtimetwiterror.dev/grafana) |
+It is aimed at **course teams and reviewers** who need a clear path from local quality checks to cloud provisioning and deployment.
 
----
+## Demo and Links
 
-## 🏗 Architecture & Design Decisions
+**Public production deployment:** The [**MiniTwit**](https://runtimetwiterror.dev) is a public site.
 
-### 1. Infrastructure: Node Separation
-We separate the App and DB/Monitoring nodes to ensure independent scalability and stability.
-* **App Nodes (Manager 1 & 2):** Lightweight nodes acting as Swarm Managers to serve the Go application and Traefik proxy.
-* **DB/Monitoring Node (Database):** A high-resource node dedicated to PostgreSQL persistence and the resource-heavy monitoring stack (Prometheus, Loki, Grafana).
+![demo.gif](report/images/demo.gif)
 
-### 2. Database Management: GORM AutoMigrate
-We utilize GORM's AutoMigrate feature, treating our Go structs as the Single Source of Truth for the database schema. This eliminates the need for manual `schema.sql` files and prevents accidental data missing during deployment.
+**Simulator API**, **Grafana**, and **Prometheus** are treated as **operator / automation** surfaces and are locked down differently (see below).
+- **Simulator API (`/api/…`)** — Every route under `/api` requests a valid Basic Authorization.
+- **Grafana (`/grafana/`)** — On the public hostname, but enforces sign-in. Access to the interface [here](https://runtimetwiterror.dev/grafana).
+- **Prometheus** — Only accessible inside the Swarm.
 
-### 3. Security: Secrets vs. Variables
-We strictly separate sensitive credentials from general configuration in GitHub Actions.
-* **Secrets:** Encrypted data (Docker Hub Tokens, SSH Keys, App Secret Keys).
-* **Variables:** Plain-text settings (IP Addresses, Domains, Usernames).
+## Installation
 
----
+### Prerequisites
 
-## 🛠 Infrastructure Setup (First-Time Provisioning)
+- **Go** (see `go.mod` for the toolchain version)
+- **Docker** and Docker Compose (for local integration tests)
+- **Node.js** and **npm** (for `htmlhint` in lint and CI)
+- **Python 3** with `pip` (for `yamllint`; tests use Compose-driven containers)
+- **Terraform**, **Ansible**, and **SSH** access to DigitalOcean (for infrastructure and one-click-style provisioning)
+- A **DigitalOcean** account, API token, and an **SSH key** registered in DO
 
-We use a modern IaC approach. **Terraform** provisions the raw cloud resources, and **Ansible** configures the operating systems and Docker Swarm cluster.
+### Clone and tooling
 
-### Step 1: Provision Cloud Resources (Terraform)
-Terraform manages the DigitalOcean VPC, Firewalls, and Droplet creation.
-
-* **Environment Variables Required:** Export `TF_VAR_do_token` (DigitalOcean API Token) and `TF_VAR_ssh_key_name` (Your SSH Key Name registered on DigitalOcean).
-This command will map your $DIGITAL_OCEAN_TOKEN and $SSH_KEY_NAME one time (will be cleaned once the terminal is closed)
 ```bash
-export TF_VAR_do_token=$DIGITAL_OCEAN_TOKEN
-export TF_VAR_ssh_key_name=$SSH_KEY_NAME
+git clone https://github.com/DevOps26-RE/DevOps26_RE_minitwit.git
+cd DevOps26_RE_minitwit
+make install-tools   # gofumpt, npm deps, yamllint; install golangci-lint separately if needed
 ```
-* **Execution:** Navigate to `terraform/stage` (or `prod`), then run `terraform init`, `terraform plan`, and `terraform apply`.
-If this is not the first time you run, you may encounter a lock file, in that way, use `terraform init -reconfigure` or `terraform plan -lock=false`
-* **State Management:** The `terraform.tfstate` file tracks the real-world infrastructure and must be ignored in Git. The `variables.tf` defines required inputs.
-* **Artifact Generation:** Upon successful application, Terraform dynamically generates the Ansible inventory file (`inventory_stage.ini`) mapping Droplets to their respective roles (`[swarm_managers]` and `[swarm_leaders]`).
 
-*Migration Note for Production:* To avoid downtime, the existing production system will only be migrated to this Terraform-managed structure during the next scheduled release window.
+## Usage
 
-### Step 2: Configure Server Environments (Ansible)
-Ansible connects to the newly created Droplets to install dependencies and initialize the cluster.
+### Static analysis (local quality gate)
 
-* **Execution:** Navigate to the `ansible/` directory and run `ansible-playbook -i inventory_stage.ini site.yml`.
-    * Reminder: Change `inventory_stage.ini` to `inventory.ini` for production
-* **Configuration (ansible.cfg):** Disables strict host key checking to allow seamless automation for newly created IP addresses.
-* **Playbook Execution Flow:**
-    * Uses the `apt` package manager to update Ubuntu systems.
-    * Installs the Docker Engine (which natively includes Swarm capabilities).
-    * Initializes the Docker Swarm leader on Manager 1 and joins Manager 2.
-    * Prepares necessary directories for database mounts and application configurations.
-
----
-
-## 🚀 CI/CD Pipeline (GitHub Actions)
-
-Once the infrastructure is up, GitHub Actions takes over the continuous deployment.
-
-### Main Workflow (App Updates)
-Triggered automatically on every push or PR to the `main` branch.
-* **Static Analysis:** Runs linters for Go, Dockerfiles, HTML, and YAML.
-* **Test:** Spins up an ephemeral local stack (`docker-compose-tests.yaml`) to run integration and simulator tests.
-* **Build & Push:** Builds multi-stage production images and pushes them to Docker Hub.
-* **Deploy:** SSHs into the Swarm Manager to execute `docker stack deploy`, updating the web services with zero downtime.
-
-### Database Workflow (DB Updates)
-Triggered **manually** via the `workflow_dispatch` button in the Actions tab.
-* **Purpose:** Updates the `docker-compose-db.yaml` configuration on the DB node.
-* **Safety Protocol:** Requires explicit selection of the target environment (Stage or Prod). Because replacing the database container introduces a few seconds of downtime, this workflow is decoupled from automatic code pushes and should only be triggered manually during low-traffic maintenance windows.
-
-### Release Workflow
-Triggered automatically when a semantic version tag is pushed to `main`, creating an official GitHub Release.
-
----
-
-## 💻 Local Development Quickstart
-
-### 1. Static Analysis (Quality Gate)
-Ensure your changes follow the project's coding standards before pushing.
-* Run `make install-tools` to install local linting dependencies.
-* Run `make lint` to execute the full suite (`gofumpt`, `golangci-lint`, `hadolint`, `htmlhint`, `yamllint`).
-
-### 2. Local Integration Testing
-The local testing environment is zero-config and uses a self-contained ephemeral stack.
-* Run `docker compose -f docker-compose-tests.yaml up --build --abort-on-container-exit --exit-code-from test` to execute the full test suite (App, DB, Selenium, and Test Runner).
-* Run `docker compose -f docker-compose-tests.yaml down -v` to clean up volumes after testing.
-
----
-
-## 🔐 Required GitHub Actions Variables & Secrets
-
-To replicate this deployment, configure the following in your repository settings:
-
-### Secrets (Encrypted)
-| Secret Name | Description |
-| :--- | :--- |
-| `DOCKERHUB_TOKEN` | Docker Hub Access Token for the image registry. |
-| `DO_SSH_KEY` | Private SSH Key for Production deployment access. |
-| `DO_SSH_KEY_STAGE` | Private SSH Key for Staging deployment access. |
-| `APP_SECRET_KEY` | Secret Key for secure Production session cookies. |
-| `APP_SECRET_KEY_STAGE` | Secret Key for secure Staging session cookies. |
-
-### Variables (Plain-text)
-| Variable Name | Description |
-| :--- | :--- |
-| `DOCKERHUB_USERNAME`| Your Docker Hub account username. |
-| `DO_USER` | SSH username (e.g., `root`). |
-| `DOMAIN` | Production domain (e.g., `runtimetwiterror.dev`). |
-| `DOMAIN_STAGE` | Staging domain or IP for PR testing. |
-| `DO_HOST` | Public IP of Production Manager 1. |
-| `DO_HOST_STAGE` | Public IP of Staging Manager 1. |
-| `DO_HOST_2` | Public IP of Production Manager 2. |
-| `DO_HOST_2_STAGE` | Public IP of Staging Manager 2. |
-| `DB_PUBLIC_IP` | Public IP of Production DB Server (for SSH maintenance). |
-| `DB_PUBLIC_IP_STAGE` | Public IP of Staging DB Server (for SSH maintenance). |
-| `DB_PRIVATE_IP` | Internal VPC IP of Production DB Server (for App connectivity). |
-| `DB_PRIVATE_IP_STAGE` | Internal VPC IP of Staging DB Server (for App connectivity). |
-
----
-
-## 📂 Project Structure
-
-```text
-.
-├── ansible/         # Playbooks for server configuration and Swarm initialization
-├── docker/          # Optimized Dockerfiles for App and Test environments
-├── grafana/         # Dashboards and datasources configuration
-├── loki/            # Logging backend configuration
-├── prometheus/      # Alerting and monitoring metric rules
-├── promtail/        # Log shipping agent configuration
-├── static/          # Static web assets (CSS, Images, JS)
-├── templates/       # HTML templates for the Go Gin framework
-├── test/            # Integration tests and Python API simulator
-├── Makefile         # One-click shortcuts for local development
-├── minitwit.go      # Application entry point
-├── monitor.go       # Monitor API entry point
-├── simulator_api.go # Simulator API entry point
-├── docker-stack.yml # Production Swarm deployment manifest
-├── docker-compose-db.yaml # Database server manifest
-└── docker-compose-tests.yaml # Ephemeral testing environment stack
+```bash
+make lint
 ```
+
+This runs `gofumpt`, `golangci-lint`, `hadolint` (via Docker in the Makefile), `htmlhint`, and `yamllint`.
+
+### Integration tests (ephemeral stack)
+
+```bash
+docker compose -f docker-compose-tests.yaml up --build --abort-on-container-exit --exit-code-from test
+docker compose -f docker-compose-tests.yaml down -v   # clean up volumes after a run
+```
+
+### CI/CD (GitHub Actions)
+
+On **push** and **pull_request** to `main`, [`.github/workflows/main.yml`](.github/workflows/main.yml) runs static analysis, tests, builds and pushes Docker images, then deploys over SSH with `docker stack deploy`. 
+
+**Releases** are created from tags matching `v*` via [`.github/workflows/release.yml`](.github/workflows/release.yml). 
+
+**Database compose** updates on the DB droplet are **manual** via [`.github/workflows/deploy-db.yml`](.github/workflows/deploy-db.yml) (stage vs prod, short downtime).
+
+To **provision DigitalOcean droplets and bootstrap Docker Swarm** from this repo (Terraform + Ansible), use the single walkthrough in [**Infrastructure provisioning**](#infrastructure-provisioning) below—not duplicated here.
+
+## Features
+
+- **MiniTwit in Go** with Gin, sessions, bcrypt passwords, and HTML templates
+- **Simulator API** and metrics endpoints for course tooling
+- **PostgreSQL** with **GORM AutoMigrate** (schema follows Go models; no hand-maintained `schema.sql` in the happy path)
+- **Docker Swarm** stack: Traefik (TLS on production), app replicas, monitoring configs as Swarm configs
+- **Dedicated DB/monitoring node** vs **app/manager nodes** for clearer scaling and failure isolation
+- **Observability**: Prometheus, Loki, Grafana, Promtail (configs under `prometheus/`, `loki/`, `grafana/`, `promtail/`)
+- **GitHub Actions**: lint → test → build/push → deploy; PR comments with image tag; optional **Release** and **Deploy DB** workflows
+- **Infrastructure as code:** Terraform creates the DO VPC, droplets, and firewall; Ansible installs Docker, forms Swarm, deploys the DB compose stack and `docker stack deploy` (stage runs Ansible from Terraform `local-exec` when SSH works). Full steps: [**Infrastructure provisioning**](#infrastructure-provisioning).
+
+## Tech Stack / Built With
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Application** | Go, Gin, GORM, PostgreSQL driver, Gin sessions, Prometheus client |
+| **Frontend** | HTML templates, static assets (`static/`, `templates/`) |
+| **Containers** | Docker, Docker Compose, multi-stage Dockerfile (`docker/Dockerfile-app`, `docker/Dockerfile-test`) |
+| **Orchestration** | Docker Swarm (`docker-stack.yml`), Traefik v3 |
+| **Infrastructure** | DigitalOcean (Droplets, VPC, firewall), Terraform, Ansible |
+| **CI/CD** | GitHub Actions, Docker Buildx, Docker Hub |
+| **Quality** | gofumpt, golangci-lint, hadolint, htmlhint, yamllint (`Makefile`, `golangci.yml`) |
+| **Tests** | Docker Compose test stack, Python tests and simulator under `test/` |
+
+## Project Structure
+
+Paths are relative to the repository root, in a logical reading order.
+
+| Path | Description |
+| :--- | :--- |
+| [`.github/workflows/`](.github/workflows/) | CI/CD (`main.yml`), release on `v*` tags (`release.yml`), manual DB compose deploy (`deploy-db.yml`) |
+| [`ansible/`](ansible/) | `site.yml`, `ansible.cfg`, `roles/docker_app/` — Docker Engine, Swarm join, copy stack files, deploy DB compose and Swarm stack |
+| [`docker/`](docker/) | `Dockerfile-app`, `Dockerfile-test` — production and test images |
+| [`docs/`](docs/) | Supplementary notes (logging, CI quality gate, GORM) |
+| [`grafana/`](grafana/) | Grafana datasource provisioning |
+| [`loki/`](loki/) | Loki configuration |
+| [`prometheus/`](prometheus/) | Prometheus scrape and alert rules |
+| [`promtail/`](promtail/) | Promtail shipper configuration |
+| [`static/`](static/) | CSS and static assets |
+| [`templates/`](templates/) | Gin HTML templates |
+| [`test/`](test/) | Python integration/UI tests, simulator, `requirements.txt`, `run_all_tests.sh` |
+| [`terraform/stage/`](terraform/stage/) | Staging DigitalOcean resources, generated `inventory_stage.ini` and `.env.stage`, local-exec Ansible |
+| [`terraform/production/`](terraform/production/) | Production DigitalOcean resources, `inventory_prod.ini`, `.env.prod` with `runtimetwiterror.dev` |
+| [`tmp/legacy/`](tmp/legacy/) | Archived course artifacts (examples only; not used by the running system) |
+| [`docker-stack.yml`](docker-stack.yml) | Swarm stack: Traefik, app, monitoring services |
+| [`docker-compose-db.yaml`](docker-compose-db.yaml) | PostgreSQL (and related) on the DB node |
+| [`docker-compose-tests.yaml`](docker-compose-tests.yaml) | Ephemeral CI/local test stack |
+| [`Makefile`](Makefile) | Lint and formatter entrypoints |
+| [`go.mod`](go.mod) / [`go.sum`](go.sum) | Go module definition and checksums |
+| [`golangci.yml`](golangci.yml) | golangci-lint configuration |
+| [`.htmlhintrc`](.htmlhintrc) / [`.yamllint`](.yamllint) | HTML and YAML lint rules |
+| [`package.json`](package.json) | npm scripts / devDependency for htmlhint |
+| [`minitwit.go`](minitwit.go) | Main web application entrypoint |
+| [`simulator_api.go`](simulator_api.go) | Simulator API entrypoint |
+| [`monitor.go`](monitor.go) | Monitoring/metrics-related entrypoint |
+| [`logger.go`](logger.go) | Logging helpers |
+
+**Historical files (kept for course process documentation only, not part of the current stack):** `Vagrantfile`, `Vagrantfile_staging` — do not use these for deployment; follow [**Infrastructure provisioning**](#infrastructure-provisioning) instead.
+
+## Architecture notes
+
+- **Node roles:** App traffic and Swarm managers on **manager** nodes; **database and monitoring** concentrated on the leader/DB node for persistence and heavier workloads.
+- **Schema:** GORM **AutoMigrate** keeps the database aligned with Go models (no parallel hand-written schema as the source of truth).
+- **Secrets vs variables:** GitHub **Secrets** for tokens and keys; **Variables** for hosts, domains, and non-secret configuration (see [Required GitHub Actions variables and secrets](#required-github-actions-variables-and-secrets)).
+
+## Infrastructure provisioning
+
+Terraform provisions the DigitalOcean **VPC, firewalls, and droplets**. **Ansible** then installs Docker Engine, initializes or joins **Docker Swarm**, copies `docker-stack.yml` and monitoring configs, starts **`docker-compose-db.yaml`** on the DB/leader node, and runs **`docker stack deploy`**. In **staging**, Terraform’s `local-exec` runs Ansible automatically once SSH to the new hosts succeeds (see `terraform/stage/main.tf`). You can also run Ansible yourself if you skip or change that provisioner.
+
+### 1. Credentials (required for every `terraform apply`)
+
+On the machine that runs Terraform, export your DigitalOcean API token and the **name** of an SSH key already registered in DigitalOcean:
+
+```bash
+export TF_VAR_do_token="$DIGITAL_OCEAN_TOKEN"
+export TF_VAR_ssh_key_name="$SSH_KEY_NAME"
+```
+
+Details for each variable live in `terraform/stage/variables.tf` and `terraform/production/variables.tf`. **Terraform state is sensitive** and must stay out of Git (already gitignored).
+
+### 2. Staging — recommended for testers (“one path” end-to-end)
+
+From the repo root:
+
+```bash
+cd terraform/stage
+terraform init
+terraform plan
+terraform apply
+```
+
+**What this does:** creates the stage VPC, droplets, and firewall; writes `ansible/inventory_stage.ini` and repo-root `.env.stage` (staging **`DOMAIN`** uses **nip.io** on manager 1’s public IP); runs Ansible over SSH to bring up Swarm and the stack.
+
+**Verify:** SSH to a manager and run `docker service ls`; open the **HTTP** URL from `.env.stage` (the `DOMAIN=…nip.io` line) for the web UI. The simulator uses **`/api`** with Basic Auth (see application code).
+
+**State locks:** If a previous run left a lock, use `terraform init -reconfigure` or resolve the lock in your backend before forcing `-lock=false`.
+
+### 3. Production — same tool chain, different contract
+
+```bash
+cd terraform/production
+terraform init
+terraform plan
+terraform apply
+```
+
+The generated `.env.prod` pins **`DOMAIN=runtimetwiterror.dev`**. Traefik uses **Let’s Encrypt** for that hostname. If you **reprovision new droplets**, you **must update DNS** for `runtimetwiterror.dev` (and related records) to the new ingress IPs; otherwise certificates and routing will not match the live domain. **Testers should prefer staging** for a full run without DNS changes; production is tied to the group’s real domain and simulator expectations.
+
+### 4. Ansible only (manual rerun or no Terraform provisioner)
+
+If you already have `inventory_*.ini` and `.env.*` on disk:
+
+```bash
+cd ansible
+ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i inventory_stage.ini -e stack_env_file=../.env.stage site.yml
+# ansible-playbook -i inventory_prod.ini -e stack_env_file=../.env.prod site.yml
+```
+
+`ansible.cfg` relaxes host key checking so automation can reach freshly created droplets.
+
+## Required GitHub Actions variables and secrets
+
+Configure these under **Settings → Secrets and variables → Actions** for a fork or new remote.
+
+### Secrets
+
+| Secret | Description |
+| :--- | :--- |
+| `DOCKERHUB_TOKEN` | Docker Hub access token for pushing images |
+| `DO_SSH_KEY` | Private SSH key for production manager |
+| `DO_SSH_KEY_STAGE` | Private SSH key for staging manager |
+| `APP_SECRET_KEY` | Session secret (production) |
+| `APP_SECRET_KEY_STAGE` | Session secret (staging) |
+
+### Variables
+
+| Variable | Description |
+| :--- | :--- |
+| `DOCKERHUB_USERNAME` | Docker Hub username |
+| `DO_USER` | SSH user (e.g. `root`) |
+| `DOMAIN` | Production hostname (`runtimetwiterror.dev`) |
+| `DOMAIN_STAGE` | Staging hostname or IP used by Actions |
+| `DO_HOST` / `DO_HOST_STAGE` | Public IP of manager 1 (prod / stage) |
+| `DO_HOST_2` / `DO_HOST_2_STAGE` | Public IP of manager 2 |
+| `DB_PUBLIC_IP` / `DB_PUBLIC_IP_STAGE` | DB droplet public IP (maintenance SSH) |
+| `DB_PRIVATE_IP` / `DB_PRIVATE_IP_STAGE` | DB private VPC IP for app connections |
+
+## Contributing
+
+Pull requests should pass **`make lint`** and the **Compose test** workflow locally when possible. Pin or comment action SHAs if you upgrade workflows. For infrastructure changes, coordinate Terraform state and DNS with the team before applying production.
+
+## License
+
+This project is created for educational purposes. It currently does not have an open-source license. 
+
+Please contact the repository maintainers or refer to the course policies before reusing this code.
+
+## Credits / Acknowledgments
+
+### ITU DevOps Course
+This project is built upon the **MiniTwit** exercise and simulator expectations provided by the course instructors.
+
+### Team Members
+- Aiting <aile@itu.dk>
+- Amanda <amli@itu.dk>
+- Elias <elpo@itu.dk>
+- Johannes <jhac@itu.dk>
+- Jakub <jgaj@itu.dk>
