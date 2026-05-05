@@ -6,3 +6,10 @@ scrape_configs:
   - job_name: "minitwit"
     static_configs:
       - targets: ["web:5001"]   # "web" is the docker-compose service name
+
+  - job_name: "node"
+    dns_sd_configs:
+      - names:
+          - "tasks.node_exporter"
+        type: "A"
+        port: 9100

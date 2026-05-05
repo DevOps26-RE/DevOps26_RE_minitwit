@@ -23,12 +23,12 @@
 - name: Fix interrupted dpkg
   command: dpkg --configure -a
   ignore_errors: true
-  no_log: false
+  no_log: true
 
 - name: Clean apt cache
   command: apt-get clean
   ignore_errors: true
-  no_log: false
+  no_log: true
 
 - name: Update apt cache
   apt:
@@ -65,7 +65,7 @@
       - python3-pip
     state: present
     lock_timeout: 120
-  no_log: true
+  no_log: false
 
 - name: Install Docker Python SDK
   pip:
@@ -144,12 +144,14 @@
   command: docker swarm init --advertise-addr {{ ansible_eth1.ipv4.address }} --data-path-addr {{ ansible_eth1.ipv4.address }}
   when: inventory_hostname in groups['swarm_leaders']
   ignore_errors: true
+  no_log: true
 
 - name: Get manager join token
   command: docker swarm join-token -q manager
   register: manager_token
   when: inventory_hostname in groups['swarm_leaders']
   changed_when: false
+  no_log: true
 
 - name: Join swarm as manager
   command: >
@@ -163,17 +165,19 @@
     - hostvars[groups['swarm_leaders'][0]]['manager_token'] is defined
     - hostvars[groups['swarm_leaders'][0]]['manager_token']['stdout'] is defined
   ignore_errors: true
+  no_log: true
 
 - name: Set monitoring label on leader_swarm
   command: docker node update --label-add role=monitoring {{ ansible_hostname }}
   when: inventory_hostname in groups['swarm_leaders']
   ignore_errors: true
+  no_log: true
 
 - name: Set ingress label on other nodes
   command: docker node update --label-add role=ingress {{ inventory_hostname }}
   when: inventory_hostname not in groups['swarm_leaders']
   ignore_errors: true
-
+  no_log: true
 
 ##################################################
 # App stack deploy (runs on leader_swarm after swarm is ready)
@@ -185,7 +189,7 @@
     state: directory
     mode: '0755'
   when: inventory_hostname in groups['swarm_managers']
-  no_log: true
+  no_log: false
 
 - name: Create config directories
   file:
@@ -198,6 +202,7 @@
     - promtail
     - grafana
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 ##################################################
 # DB server tasks (runs on leader_swarm)
@@ -209,6 +214,7 @@
     state: directory
     mode: '0755'
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 - name: Copy docker-compose-db.yaml to DB server
   copy:
@@ -218,17 +224,20 @@
     group: root
     mode: '0644'
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 - name: Start Docker Compose containers
   command: docker compose -f /root/docker-compose-db.yaml up -d
   register: compose_result
   changed_when: "'Started' in compose_result.stdout or 'created' in compose_result.stdout"
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 - name: Display Docker Compose result
   debug:
     msg: "{{ compose_result.stdout }}"
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 ##################################################
 # App stack deploy (runs on leader_swarm after swarm is ready)
@@ -253,6 +262,7 @@
     - promtail
     - grafana
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 - name: Copy stack definition to leader
   copy:
@@ -262,6 +272,7 @@
     group: root
     mode: '0644'
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 - name: Copy stack config files to leader
   copy:
@@ -276,6 +287,7 @@
     - {src: "{{playbook_dir}}/../promtail/promtail-config.yaml", dest: "/opt/minitwit/promtail/promtail-config.yaml"}
     - {src: "{{playbook_dir}}/../grafana/datasources.yaml", dest: "/opt/minitwit/grafana/datasources.yaml"}
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 - name: Copy environment file to leader
   copy:
@@ -285,6 +297,7 @@
     group: root
     mode: '0600'
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 ##################################################
 # Load environment and deploy stack
@@ -295,6 +308,7 @@
   register: env_file
   changed_when: false
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
 
 - name: Parse .env file into dict
   set_fact:
@@ -305,6 +319,7 @@
     - env_file.stdout_lines is defined
     - item != ''
     - '"=" in item'
+  no_log: true
 
 - name: Deploy stack to swarm
   command: docker stack deploy -c docker-stack.yml minitwit --with-registry-auth --resolve-image always
@@ -312,3 +327,4 @@
     chdir: /opt/minitwit
   environment: "{{ env_dict | default({}) }}"
   when: inventory_hostname in groups['swarm_leaders']
+  no_log: true
