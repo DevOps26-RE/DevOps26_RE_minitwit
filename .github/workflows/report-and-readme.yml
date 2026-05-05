@@ -1,0 +1,25 @@
+# Lightweight checks when only report/ or README.md change (main CI is skipped via paths-ignore).
+# Add this job name under branch protection "required checks" if you require a green check on docs-only PRs.
+name: Report and README
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - "report/**"
+      - "README.md"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "report/**"
+      - "README.md"
+
+jobs:
+  expand-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Expand @include into report/main.md
+        run: make report
