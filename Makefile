@@ -1,4 +1,4 @@
-.PHONY: all lint fmt-go lint-go lint-docker lint-html lint-yaml install-tools
+.PHONY: all lint fmt-go lint-go lint-docker lint-html lint-yaml install-tools report report-expand-process
 
 # Default target: runs all linting and formatting tasks
 all: lint
@@ -41,3 +41,14 @@ install-tools:
 	pip install yamllint
 	@echo "✅ npm, pip, and go tools installation completed!"
 	@echo "⚠️ If golangci-lint is not installed, please refer to: https://golangci-lint.run/usage/install/"
+
+# Expand @include lines from report/main.template.md into report/main.md (nested includes supported).
+# Target must be .PHONY: a directory named report/ exists; otherwise `make report` would never run the recipe.
+report:
+	@python3 report/tools/expand_report_includes.py \
+		report/main.template.md \
+		report/main.md
+
+# Backwards-compatible alias (same as `make report`)
+report-expand-process: report
+	@:
