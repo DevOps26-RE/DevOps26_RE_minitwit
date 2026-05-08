@@ -138,6 +138,15 @@ EOT
 }
 
 resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not create anything, just run commands
+  triggers = {
+    db_id       = digitalocean_droplet.db_prod.id
+    manager_ids = join(",", [
+      digitalocean_droplet.manager1_prod.id,
+      digitalocean_droplet.manager2_prod.id
+    ])
+    inventory_hash = filesha256("${path.module}/../../ansible/inventory_stage.ini")
+  }
+
   depends_on = [
     digitalocean_droplet.db_prod,
     digitalocean_droplet.manager1_prod,
