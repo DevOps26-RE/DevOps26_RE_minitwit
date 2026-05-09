@@ -29,21 +29,11 @@ resource "digitalocean_vpc" "minitwit_vpc" {
   ip_range = "10.10.20.0/24"
 }
 
-# --- Manager 1 ---
-resource "digitalocean_droplet" "manager1_stage" {
+# --- Managers (count-controlled) ---
+resource "digitalocean_droplet" "manager_stage" {
+  count    = var.manager_count
   image    = "ubuntu-22-04-x64"
-  name     = "manager1-stage"
-  region   = "fra1"
-  size     = "s-1vcpu-1gb"
-  ssh_keys = [data.digitalocean_ssh_key.my_ssh_key.id]
-  vpc_uuid = digitalocean_vpc.minitwit_vpc.id
-  tags     = [digitalocean_tag.minitwit_stage.id]
-}
-
-# --- Manager 2 ---
-resource "digitalocean_droplet" "manager2_stage" {
-  image    = "ubuntu-22-04-x64"
-  name     = "manager2-stage"
+  name     = "manager${count.index + 1}-stage"
   region   = "fra1"
   size     = "s-1vcpu-1gb"
   ssh_keys = [data.digitalocean_ssh_key.my_ssh_key.id]
@@ -128,8 +118,9 @@ resource "local_file" "ansible_inventory" {
 db-stage ansible_host=${digitalocean_droplet.db_stage.ipv4_address}
 
 [swarm_managers]
-manager1-stage ansible_host=${digitalocean_droplet.manager1_stage.ipv4_address}
-manager2-stage ansible_host=${digitalocean_droplet.manager2_stage.ipv4_address}
+%{ for droplet in digitalocean_droplet.manager_stage ~}
+${droplet.name} ansible_host=${droplet.ipv4_address}
+%{ endfor ~}
 
 [all:vars]
 ansible_user=root
@@ -139,18 +130,13 @@ EOT
 
 resource "null_resource" "run_ansible_stage" { # null_resource is a TYPE does not create anything, just run commands
   triggers = {
-    db_id       = digitalocean_droplet.db_stage.id
-    manager_ids = join(",", [
-      digitalocean_droplet.manager1_stage.id,
-      digitalocean_droplet.manager2_stage.id
-    ])
-    inventory_hash = filesha256("${path.module}/../../ansible/inventory_stage.ini")
+    manager_ips = join(",", digitalocean_droplet.manager_stage[*].ipv4_address)
+    db_ip       = digitalocean_droplet.db_stage.ipv4_address
   }
 
   depends_on = [
     digitalocean_droplet.db_stage,
-    digitalocean_droplet.manager1_stage,
-    digitalocean_droplet.manager2_stage,
+    digitalocean_droplet.manager_stage,
     local_file.ansible_inventory
   ]
 
@@ -200,8 +186,7 @@ resource "null_resource" "run_ansible_stage" { # null_resource is a TYPE does no
 resource "null_resource" "get_private_ips" {
   depends_on = [
     digitalocean_droplet.db_stage,
-    digitalocean_droplet.manager1_stage,
-    digitalocean_droplet.manager2_stage
+    digitalocean_droplet.manager_stage
   ]
 }
 
@@ -211,21 +196,21 @@ resource "local_file" "env_file" {
 DOCKER_IMAGE=runtimeerroritu/minitwit:latest
 DB_ADDR=${digitalocean_droplet.db_stage.ipv4_address_private}
 
-# Use nip.io to create a magic domain for the staging environment using the Public IP
-DOMAIN=${digitalocean_droplet.manager1_stage.ipv4_address}.nip.io
+# Use nip.io to create a magic domain for the staging environment using the Public IP of manager1
+DOMAIN=${digitalocean_droplet.manager_stage[0].ipv4_address}.nip.io
 
-MANAGER1_IP=${digitalocean_droplet.manager1_stage.ipv4_address}
-MANAGER2_IP=${digitalocean_droplet.manager2_stage.ipv4_address}
+%{ for i, droplet in digitalocean_droplet.manager_stage ~}
+MANAGER${i + 1}_IP=${droplet.ipv4_address}
+%{ endfor ~}
 
 # Update URLs to use the new nip.io domain
-PROM_URL=http://${digitalocean_droplet.manager1_stage.ipv4_address}.nip.io/prometheus
-GRAFANA_URL=http://${digitalocean_droplet.manager1_stage.ipv4_address}.nip.io/grafana/
+PROM_URL=http://${digitalocean_droplet.manager_stage[0].ipv4_address}.nip.io/prometheus
+GRAFANA_URL=http://${digitalocean_droplet.manager_stage[0].ipv4_address}.nip.io/grafana/
 EOT
   filename = "../../.env.stage"
 
   depends_on = [
     digitalocean_droplet.db_stage,
-    digitalocean_droplet.manager1_stage,
-    digitalocean_droplet.manager2_stage
+    digitalocean_droplet.manager_stage
   ]
 }
