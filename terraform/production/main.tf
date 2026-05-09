@@ -29,21 +29,11 @@ resource "digitalocean_vpc" "minitwit_vpc" {
   ip_range = "10.10.10.0/24"
 }
 
-# --- Manager 1 ---
-resource "digitalocean_droplet" "manager1_prod" {
+# --- Managers (count-controlled) ---
+resource "digitalocean_droplet" "manager_prod" {
+  count    = var.manager_count
   image    = "ubuntu-22-04-x64"
-  name     = "manager1-prod"
-  region   = "fra1"
-  size     = "s-1vcpu-1gb"
-  ssh_keys = [data.digitalocean_ssh_key.my_ssh_key.id]
-  vpc_uuid = digitalocean_vpc.minitwit_vpc.id
-  tags     = [digitalocean_tag.minitwit_prod.id]
-}
-
-# --- Manager 2 ---
-resource "digitalocean_droplet" "manager2_prod" {
-  image    = "ubuntu-22-04-x64"
-  name     = "manager2-prod"
+  name     = "manager${count.index + 1}-prod"
   region   = "fra1"
   size     = "s-1vcpu-1gb"
   ssh_keys = [data.digitalocean_ssh_key.my_ssh_key.id]
@@ -128,8 +118,9 @@ resource "local_file" "ansible_inventory" {
 db-prod ansible_host=${digitalocean_droplet.db_prod.ipv4_address}
 
 [swarm_managers]
-manager1-prod ansible_host=${digitalocean_droplet.manager1_prod.ipv4_address}
-manager2-prod ansible_host=${digitalocean_droplet.manager2_prod.ipv4_address}
+%{ for droplet in digitalocean_droplet.manager_prod ~}
+${droplet.name} ansible_host=${droplet.ipv4_address}
+%{ endfor ~}
 
 [all:vars]
 ansible_user=root
@@ -139,18 +130,13 @@ EOT
 
 resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not create anything, just run commands
   triggers = {
-    db_id       = digitalocean_droplet.db_prod.id
-    manager_ids = join(",", [
-      digitalocean_droplet.manager1_prod.id,
-      digitalocean_droplet.manager2_prod.id
-    ])
-    inventory_hash = filesha256("${path.module}/../../ansible/inventory_stage.ini")
+    manager_ips = join(",", digitalocean_droplet.manager_prod[*].ipv4_address)
+    db_ip       = digitalocean_droplet.db_prod.ipv4_address
   }
 
   depends_on = [
     digitalocean_droplet.db_prod,
-    digitalocean_droplet.manager1_prod,
-    digitalocean_droplet.manager2_prod,
+    digitalocean_droplet.manager_prod,
     local_file.ansible_inventory
   ]
 
@@ -200,8 +186,7 @@ resource "null_resource" "run_ansible_prod" { # null_resource is a TYPE does not
 resource "null_resource" "get_private_ips" {
   depends_on = [
     digitalocean_droplet.db_prod,
-    digitalocean_droplet.manager1_prod,
-    digitalocean_droplet.manager2_prod
+    digitalocean_droplet.manager_prod
   ]
 }
 
@@ -213,8 +198,9 @@ DB_ADDR=${digitalocean_droplet.db_prod.ipv4_address_private}
 
 DOMAIN=runtimetwiterror.dev
 
-MANAGER1_IP=${digitalocean_droplet.manager1_prod.ipv4_address}
-MANAGER2_IP=${digitalocean_droplet.manager2_prod.ipv4_address}
+%{ for i, droplet in digitalocean_droplet.manager_prod ~}
+MANAGER${i + 1}_IP=${droplet.ipv4_address}
+%{ endfor ~}
 
 PROM_URL=https://runtimetwiterror.dev/prometheus
 GRAFANA_URL=https://runtimetwiterror.dev/grafana/
@@ -223,7 +209,6 @@ EOT
 
   depends_on = [
     digitalocean_droplet.db_prod,
-    digitalocean_droplet.manager1_prod,
-    digitalocean_droplet.manager2_prod
+    digitalocean_droplet.manager_prod
   ]
 }
