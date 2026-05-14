@@ -1,38 +1,20 @@
 # Reflection Perspective
-
-Describe the biggest issues, how you solved them, and which are major lessons learned with regards to:
-- evolution and refactoring
-- operation, and
-- maintenance
-of your ITU-MiniTwit systems. Link back to respective commit messages, issues, tickets, etc. to illustrate these.
-
-Also reflect and describe what was the "DevOps" style of your work. For example, what did you do differently to previous development projects and how did it work?
-
-Use of Generative AI
-
-ITU's rules on the use of generative AI apply for this report too. They are described here and in detail here. Please follow them. For your report that means that you have to state which generative AI tools have been used for which task(s) in your projects. Additionally, describe how generative AI tools have been used and briefly reflect and discuss how they supported or hindered your work process.
-
-
-<!-- Cover: major issues and how you solved them; lessons on evolution/refactoring, operation, and maintenance. Link to commits, issues, tickets. Reflect on your DevOps-style work vs previous projects. -->
-
 ## Major issues, resolutions, and lessons learned
-
-### Evolution and refactoring
-
-<!-- Link: relevant commits / PRs / issues. -->
-
-### Operation
-
-<!-- Link: on-call, incidents, alerts (if any). -->
+Initially each member ported part of the Python-to-Go rewrite alone, which left some disconnected; we fixed this by moving our most knowledgeable member to a pure peer-review role and holding weekly syncs.
 
 ### Maintenance
+Our biggest failure was the Compose-to-Swarm migration: the deploy automation had only ever worked against Compose, so the cutover broke live and took four successive fixes to stabilise [#36–#39]. The deeper cause was treating the migration itself as the first real test of the new automation. Lesson: major infrastructure changes need a deployment path proven on staging first, and shared edge components like Traefik must be decoupled so they survive migrations.
 
-<!-- Link: technical debt, documentation, dependency upgrades, etc. -->
+### DevOps-style work compared to earlier projects
+Unlike earlier projects, a CI/CD pipeline ran analysis, staging deployment, and tests on every PR <!-- We might want to link to the actual PR in which this was implemented? -->, making integration continuous rather than last-minute.
+Generative AI. Used for boilerplate route porting, documentation, and as a searchable interface to our own codebase; results were useful but occasionally over-complex.
 
-## DevOps-style work compared to earlier projects
+### Use of Generative AI
+We used generative AI for several tasks, with mixed results:
 
-<!-- e.g. automation, small batches, IaC, observability-first practices. -->
+- __Documentation:__ Generating documentation for new implementations, which we used in Thursday meetings to recap the week's work.
+- __As a documentation search engine:__ Querying specific, hard-to-understand parts of technologies instead of reading official docs. This sometimes worked well but sometimes produced unnecessarily complex suggestions.
+- __Boilerplate porting:__ Translating the routing layer from Python to Go.
+- __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear — most usefully, the interactions between DigitalOcean's network, Docker's network, and each VM's network.
 
-## Use of Generative AI
-
-<!-- e.g. how we use ai. -->
+<!-- around 286 words total -->
