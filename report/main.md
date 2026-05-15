@@ -408,7 +408,7 @@ The current operating model is therefore: **Terraform + Ansible for environment 
 
 <!-- What you monitor, which tools (Prometheus, Grafana, …), key metrics and dashboard links (may reference appendix). -->
 
-Monitoring is split across two tools: Prometheus for metrics and Loki for logs. Both visualized through Grafana, with both datasources provisioned automatically on deployment (no manual setup required).
+Monitoring is split across two tools: Prometheus for metrics and Loki for logs. Both visualized through Grafana, with both datasources provisioned automatically on deployment.
 
 ### Metrics (Prometheus)
 
@@ -433,17 +433,16 @@ Two dashboards are maintained:
 **Metrics dashboard** (Prometheus datasource):
 
 - **CPU utilisation**: shows host CPU usage over time per node; helps detect runaway processes or traffic spikes. A color indicator reflects current consumption: green (healthy), yellow (moderate), red (critical).
-- **Memory utilisation**: tracks RAM usage per node; useful for catching memory leaks. Same green/yellow/red color coding indicates current memory pressure at a glance.
+- **Memory utilisation**: tracks RAM usage per node; useful for catching memory leaks through the timeline. Same green/yellow/red color coding indicates current memory usage at a glance.
 - **HTTP request rate**: derived from `minitwit_http_requests_total`; shows how many requests/sec the app is handling.
 - **Average & p95 response time**: derived from the duration histogram; p95 highlights tail latency that averages would hide.
-- **Successful requests**: counts 2xx responses; a sudden drop signals an outage or regression.
+- **Successful requests**: counts https status code successful code (2xx) responses; a sudden drop signals an outage or regression.
 - **Traffic by endpoint**: breaks request rate down by route template; reveals which endpoints are under the most load.
 
 **Log dashboard** (Loki datasource):
 
-- **Overall traffic**: log volume over time across all services; a quick sanity-check for whether the app is receiving requests.
-- **Database errors**: filters for error-level log lines from the `db` service; these panels may not function correctly due to incomplete error handling in the application code.
-- **Service errors**: filters for error-level log lines from the web service; same caveat applies.
+- **Minitwit log**: log volume over time across all web app replicas; a quick check for whether the app is receiving requests.
+- **DB error log**: filters for error-level log lines from the `db` service.
 
 Grafana's Explore view allows correlating a spike in a Prometheus graph with the corresponding Loki log lines from the same time window, enabling faster incident investigation.
 
@@ -462,21 +461,18 @@ Each log entry contains the following fields:
 | `route` | `/:username` | Gin route template, avoids high-cardinality labels |
 | `status` | `200` | HTTP response status code |
 | `latency_ms` | `12` | Request duration in milliseconds |
-| `client_ip` | `1.2.3.4` | Originating IP (respects X-Forwarded-For) |
+| `client_ip` | `1.2.3.4` | Originating IP |
 | `user_agent` | `Mozilla/5.0 …` | Browser or client identifier |
 | `bytes_out` | `1024` | Response body size in bytes |
 
 ### Log Aggregation
 
-**Promtail** runs as a `global` service in the Docker Swarm (one instance per node). It connects to the Docker daemon via the Unix socket (`/var/run/docker.sock`) and automatically discovers all running containers, tailing their stdout and stderr, no hardcoded service names required.
-
-Each log line is forwarded to **Loki** with three labels:
+**Promtail** runs as a `global` service in the Docker Swarm (one instance per node).
+Each log line is forwarded to **Loki** with three labels to ensure efficient queries:
 
 - **`service`**: Docker Compose service name (e.g. `web`). Used to scope queries to a single service, e.g. `{service="web"}`.
 - **`container`**: Full container name (e.g. `minitwit-web-1`). Useful when multiple replicas run side by side and you need to isolate one instance.
 - **`stream`**: Either `stdout` or `stderr`. Allows filtering out noisy stderr from libraries while keeping application logs clean.
-
-These low-cardinality labels keep Loki queries efficient.
 
 ### Storage & Querying
 
@@ -489,18 +485,13 @@ Loki uses a single-node filesystem-backed setup with **7-day retention**. Logs a
 # All logs from any web container replica (regex match)
 {container=~"minitwit_web.*"}
 
-# Server errors (status >= 500)
-{service="web"} | json | status >= 500
-
 # Slow requests (latency > 1 second)
 {service="web"} | json | latency_ms > 1000
 
 # Error-level log lines
-{service="minitwit_web"} | json | level =~ `(?i)error`
 {service="db"} | json | level =~ `(?i)error`
 
 # Timeout events
-{service="minitwit_web"} |= "timeout"
 {service="db"} |= "timeout"
 ```
 
@@ -576,21 +567,32 @@ When deploying a new version, Swarm performs a rolling update: each new replica 
 <a id="reflection-perspective"></a>
 
 # Reflection Perspective
-## Major issues, resolutions and lessons learned
-Initially each member ported part of the Python-to-Go rewrite alone, which left some disconnected; we fixed this by moving our most knowledgeable member to a pure peer-review role and holding weekly syncs.
+## Issues, resolutions and lessons learned
+Initially each member ported part of the Python-to-Go rewrite alone, which left some tasks disconnected; 
+Going forward, we addressed this by assigning the group member with the most pre-existing knowledgeable the peer-review role and we held weekly syncs.
 
-### Maintenance
-Our biggest failure was the Compose-to-Swarm migration: the deploy automation had only ever worked against Compose, so the cutover broke live and took four successive fixes to stabilise [#36–#39]. The deeper cause was treating the migration itself as the first real test of the new automation. Lesson: major infrastructure changes need a deployment path proven on staging first and shared edge components like Traefik must be decoupled so they survive migrations.
+## Maintenance
+We experienced our biggest issue during the Compose-to-Swarm migration: 
+the deployment automation had only ever worked against Compose, so the cutover broke live and took four successive fixes to stabilize [#36–#39]. 
+The deeper cause was treating the migration itself as the first real test of the new automation. 
+Lesson: major infrastructure changes need a deployment path proven on staging first and shared edge components like Traefik must be decoupled so they survive migrations.
 
-### DevOps-style work compared to earlier projects
-Unlike earlier projects, a CI/CD pipeline ran analysis, staging deployment and tests on every PR <!-- We might want to link to the actual PR in which this was implemented? -->, making integration continuous rather than last-minute.
-Generative AI. Used for boilerplate route porting, documentation and as a searchable interface to our own codebase; results were useful but occasionally over-complex.
+## Network
+We encountered several network configuration challenges, particularly after integrating Traefik, TLS, and the Swarm Overlay Network. 
+Although we successfully restored communication to its expected state, we still lack a clear understanding of the root causes and how to prevent similar issues in the future.
 
-### Use of Generative AI
-We used generative AI for several tasks, with mixed results:
+## DevOps-style work compared to earlier projects
+### CI/CD
+In contrast to previous academic projects, we integrated a CI/CD pipeline that automatically ran static analysis, deployed to a staging environment and executed tests on every pull request. This shifted our integration process from a last-minute effort to a continuous, reliable workflow.
+### Monitoring
+Previously, application logs were rarely actively reviewed. Because this was our first experience managing a deployed project with simulated live traffic, we quickly realized the necessity of system observability. Initially, we manually checked droplet metrics via the DigitalOcean dashboard. Implementing an automated monitoring stack proved crucial: being able to see when a virtual machine approaches its memory limit allows us to proactively address issues rather than reacting to system failures after the fact.
+### Deployment
+By finalizing a one-click deployment pipeline, we abstracted the complexity of our infrastructure. This ensures that any team member can reliably deploy the project regardless of their familiarity with the underlying systems. Furthermore, this automation improves system security by encapsulating sensitive deployment credentials and processes, significantly reducing the risk of manual configuration errors.
 
+## Use of Generative AI
+We used generative AI all the time for several tasks, with mixed results:
+- __Rapid prototyping and iterative refinement:__ We utilized generative AI to draft most of the initial codebase. Because this auto-generated code frequently led to failures, therefore we had to manually correct it.
 - __Documentation:__ Generating documentation for new implementations, which we used in Thursday meetings to recap the week's work.
 - __As a documentation search engine:__ Querying specific, hard-to-understand parts of technologies instead of reading official docs. This sometimes worked well but sometimes produced unnecessarily complex suggestions.
 - __Boilerplate porting:__ Translating the routing layer from Python to Go.
 - __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear: most usefully, the interactions between DigitalOcean's network, Docker's network and each VM's network.
-
