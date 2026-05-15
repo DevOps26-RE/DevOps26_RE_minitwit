@@ -6,7 +6,7 @@
 
 - **MiniTwit** in **Go** (Gin) with sessions and HTML templates,**PostgreSQL** via **GORM AutoMigrate**, a **simulator-compatible HTTP API**, and **Docker Swarm** on **DigitalOcean**.
 - Observability uses **Prometheus**, **Loki**, **Grafana**, and **Promtail**. 
-- **Terraform** provisions the VPC, firewalls, and droplets; **Ansible** installs Docker Engine, bootstraps Swarm, and deploys the stack. 
+- **Terraform** provisions the VPC, firewalls, and droplets; **Ansible** installs Docker Engine, start Swarm, and deploys the stack. 
 - **GitHub Actions** runs lint and tests, builds images, and deploys to **staging** (pull requests) or **production** (`main`).
 
 It is aimed at **course teams and reviewers** who need a clear path from local quality checks to cloud provisioning and deployment.
@@ -66,7 +66,7 @@ On **push** and **pull_request** to `main`, [`.github/workflows/main.yml`](.gith
 
 **Database compose** updates on the DB droplet are **manual** via [`.github/workflows/deploy-db.yml`](.github/workflows/deploy-db.yml) (stage vs prod, short downtime).
 
-To **provision DigitalOcean droplets and bootstrap Docker Swarm** from this repo (Terraform + Ansible), use the single walkthrough in [**Infrastructure provisioning**](#infrastructure-provisioning) below—not duplicated here.
+To **provision DigitalOcean droplets and start Docker Swarm** from this repo (Terraform + Ansible), use the single walkthrough in [**Infrastructure provisioning**](#infrastructure-provisioning) below—not duplicated here.
 
 ## Features
 

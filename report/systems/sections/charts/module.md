@@ -1,4 +1,4 @@
-### Module View
+#### Module View
 
 This view illustrates the static package structure and dependency flow of the Minitwit codebase, adhering to Clean Architecture principles:
 

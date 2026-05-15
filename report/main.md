@@ -14,7 +14,7 @@ This section details the architecture, dependencies and quality assessment of th
 <!-- Describe and illustrate: service boundaries, data flows, deployment topology (Swarm / node roles), main components (app, DB, Traefik, observability stack, etc.). -->
 
 ### Module Viewpoint
-### Module View
+#### Module View
 
 This view illustrates the static package structure and dependency flow of the Minitwit codebase, adhering to Clean Architecture principles:
 
@@ -199,13 +199,13 @@ class L_Ext ext;
 #### Deployment View
 
 This is the deployment view for our 3-node Minitwit Swarm cluster:
-* **Cluster Topology:** The environment consists of 3 virtual machines. All act as Swarm Managers to maintain a highly available quorum, ensuring seamless leader election if a node fails.
+* **Cluster Topology:** The environment consists of 3 virtual machines. All act as Swarm Managers to maintain a highly available cluster, ensuring seamless leader election if a node fails.
 * **Workload Allocation:** 
   * **Node 1:** Acts as the ingress node, hosting the Traefik proxy.
   * **Node 1 & 2:** Host the distributed Minitwit application replicas.
   * **Node 3:** Dedicated to the centralized observability stack (Grafana, Prometheus, Loki).
   * **Global:** Promtail and Node Exporter agents are deployed universally across all three nodes.
-* **External Infrastructure:** The PostgreSQL database is deployed on a standalone instance outside the Swarm cluster, but remains secured within the same VPC.
+* **External Infrastructure:** The PostgreSQL database is deployed on the Node 3 through a docker compose, outside the Swarm cluster, but remains secured within the same VPC.
 * **Network Infrastructure:**
   * **Control Plane:** Swarm management and node discovery (TCP 2377, 7946) operate on a dedicated infrastructure bus.
   * **Data Plane:** Inter-node container traffic is encapsulated via the Swarm Overlay network (UDP 4789), while intra-node traffic is routed directly through local network.
@@ -322,7 +322,7 @@ This sequence diagram illustrates our automated, end-to-end deployment process:
 * **Infrastructure Provisioning:** Terraform initializes and provisions the core infrastructure (Virtual Machines and firewalls) on DigitalOcean.
 * **Dynamic Configuration:** Terraform automatically generates the required Ansible inventory (`.ini`) and environment variables (`.env`) locally based on the provisioned resources.
 * **Automated Handoff:** Terraform seamlessly triggers the Ansible playbook execution.
-* **Cluster Setup & Deployment:** Ansible reads the generated configurations to bootstrap the Docker Swarm cluster and deploy the application stack (along with the standalone database) directly onto the virtual machines.
+* **Cluster Setup & Deployment:** Ansible reads the generated configurations to initiate the Docker Swarm cluster and deploy the application stack (along with the database) directly onto the virtual machines.
 
 ```mermaid
 
@@ -362,7 +362,7 @@ sequenceDiagram
 
 ## Dependencies and technology stack
 
-This project’s core application is written in Go (1.25) using Gin for routing, Gin sessions for auth state, GORM with the PostgreSQL driver for persistence and Prometheus client libraries for app metrics. The UI is server-rendered from HTML templates plus static assets. Locally and in CI, Docker Compose runs the app, PostgreSQL, Selenium and Python-based integration tests. Production deployment uses Docker Swarm with Traefik as ingress and TLS termination. Infrastructure is managed as code with Terraform (DigitalOcean VPC, droplets, firewalls) and Ansible (Docker/Swarm bootstrap and deploy). Observability is handled by Prometheus, Loki, Promtail, Grafana and node_exporter; CI/CD runs in GitHub Actions.
+This project’s core application is written in Go (1.25) using Gin for routing, Gin sessions for auth state, GORM with the PostgreSQL driver for persistence and Prometheus client libraries for app metrics. The UI is server-rendered from HTML templates plus static assets. Locally and in CI, Docker Stack provisions the app, PostgreSQL, Selenium and Python-based integration tests. Production deployment uses Docker Swarm with Traefik as ingress and TLS termination. Infrastructure is managed as code with Terraform (DigitalOcean VPC, droplets, firewalls) and Ansible (Docker/Swarm initiate and deploy). Observability is handled by Prometheus, Loki, Promtail, Grafana and Node Exporter; CI/CD runs in GitHub Actions.
 
 ## Static Analysis and Quality
 
@@ -382,7 +382,7 @@ Formatting issues are corrected automatically where possible. Errors or security
 
 **Layer 2: SonarQube Cloud**
 SonarQube performs deeper cross-language analysis to scan for bugs, security vulnerabilities and code smells. It is integrated with GitHub to provide real-time inline feedback on pull requests.
-
+Our current SonarQube rating is as follows: Security Rating is an E with 18 unsolved issues; Security Hotspot is an E with 9 unsolved issues; Reliability is an A with 1 unsolved issue; and Maintainability is an A with 29 unsolved issues.
 <a id="process-perspective"></a>
 
 # Process Perspective
@@ -396,13 +396,13 @@ Our delivery process evolved incrementally from manual operations to commit-driv
 1. **Manual local phase (Python):** The project started as a local Python app with manual startup/testing. We used helper bash scripts for local control (legacy examples are still kept under `tmp/legacy/`).
 2. **Containerized but still manual:** We then introduced Docker, but builds and runs were still triggered manually on local machines.
 3. **Vagrant + DigitalOcean provisioning:** Next, we used `Vagrantfile`-based provisioning for droplets. Early provisioning relied on inline shell scripts (Docker install, DB/app startup, IP handoff via `db_ip.txt`), so deployment was cloud-based but still operator-driven.
-4. **Ansible replacing shell provisioning:** We migrated host setup and deployment logic into Ansible (`ansible/site.yml`, `ansible/roles/docker_app`), making bootstrap and re-runs more repeatable.
+4. **Ansible replacing shell provisioning:** We migrated host setup and deployment logic into Ansible (`ansible/site.yml`, `ansible/roles/docker_app`), making start and re-runs more repeatable.
 5. **GitHub Actions CI/CD adoption:** We added commit-triggered automation in `.github/workflows/main.yml`, moving from manual build/deploy to pipeline-based quality gates, image build/push and remote deployment.
 6. **Pipeline hardening and release split:** The pipeline matured into lint → test → build/push → deploy, with branch-aware image tags and PR traceability comments; releases were separated into `release.yml` (`v*` tags).
 7. **Environment separation + controlled DB updates:** We introduced stage/prod handling and a dedicated manual DB workflow (`deploy-db.yml`) because DB compose updates can cause brief downtime and require explicit operator intent.
-8. **Terraform + Ansible one-click bootstrap:** Finally, infrastructure provisioning moved to Terraform (`terraform/stage`, `terraform/production`), which generates inventory/env artifacts and triggers Ansible via `local-exec` to bootstrap a full environment.
+8. **Terraform + Ansible one-click deployment:** Finally, infrastructure provisioning moved to Terraform (`terraform/stage`, `terraform/production`), which generates inventory/env artifacts and triggers Ansible via `local-exec` to start a full environment.
 
-The current operating model is therefore: **Terraform + Ansible for environment creation/bootstrap** and **GitHub Actions for ongoing application delivery per commit**. Historical files such as `Vagrantfile` and `Vagrantfile_staging` remain in the repository for process documentation but are no longer the primary deployment path.
+The current operating model is therefore: **Terraform + Ansible for environment creation** and **GitHub Actions for ongoing application delivery per commit**. Historical files such as `Vagrantfile` and `Vagrantfile_staging` remain in the repository for process documentation but are no longer the primary deployment path.
 
 ## Monitoring
 
@@ -594,4 +594,3 @@ We used generative AI for several tasks, with mixed results:
 - __Boilerplate porting:__ Translating the routing layer from Python to Go.
 - __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear: most usefully, the interactions between DigitalOcean's network, Docker's network and each VM's network.
 
-<!-- around 286 words total -->
