@@ -15,6 +15,6 @@ We used generative AI for several tasks, with mixed results:
 - __Documentation:__ Generating documentation for new implementations, which we used in Thursday meetings to recap the week's work.
 - __As a documentation search engine:__ Querying specific, hard-to-understand parts of technologies instead of reading official docs. This sometimes worked well but sometimes produced unnecessarily complex suggestions.
 - __Boilerplate porting:__ Translating the routing layer from Python to Go.
-- __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear — most usefully, the interactions between DigitalOcean's network, Docker's network and each VM's network.
+- __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear: most usefully, the interactions between DigitalOcean's network, Docker's network and each VM's network.
 
 <!-- around 286 words total -->

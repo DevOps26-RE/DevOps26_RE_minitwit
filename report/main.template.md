@@ -1,4 +1,4 @@
-# ITU-MiniTwit — Final Report (Main Index)
+# ITU-MiniTwit: Final Report (Main Index)
 
 <!-- Formal requirements checklist (verify against the full course brief before writing / exporting PDF):
   - Maximum ~2500 words for the final report; figures do not count toward the word limit.

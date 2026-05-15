@@ -1,4 +1,4 @@
-# ITU-MiniTwit: Final Report
+# ITU-MiniTwit: Final Report (Main Index)
 
 <!-- Formal requirements checklist (verify against the full course brief before writing / exporting PDF):
   - Maximum ~2500 words for the final report; figures do not count toward the word limit.
@@ -12,7 +12,7 @@
 
 ## Abstract
 
-<!-- One short paragraph. TODO: Draft this after the body is complete. -->
+<!-- One short paragraph. You may draft this after the body is complete. -->
 
 ## Outline
 
@@ -25,14 +25,9 @@
 
 <a id="system-perspective"></a>
 
-# System
+# System Perspective
 
-A description and illustration of the:
-- Design and architecture of your ITU-MiniTwit systems.
-- All dependencies of your ITU-MiniTwit systems on all levels of abstraction and development stages. That is, list and briefly describe all technologies and tools you applied and depend on. 
-- Describe the current state of your systems, for example using results of static analysis and quality assessments.
-
-<!-- Cover: MiniTwit design and architecture (with diagrams), dependencies and tools at each abstraction level and development stage and the current state from static analysis and quality assessments. -->
+This section details the architecture, dependencies and quality assessment of the ITU-MiniTwit system. We describe the service boundaries and data flows through multiple viewpoints and list the technologies used to build and deploy the application.
 
 
 
@@ -41,7 +36,7 @@ A description and illustration of the:
 
 <!-- Describe and illustrate: service boundaries, data flows, deployment topology (Swarm / node roles), main components (app, DB, Traefik, observability stack, etc.). -->
 
-### Modules
+### Module Viewpoint
 ```mermaid
 flowchart TB
 %% ==========================================
@@ -103,9 +98,10 @@ class PkgMain,PkgGin,PkgGorm,PkgPrometheus,CoreApplication packageStyle;
 
 
 
-### Components and Connectors
+### Component and Connector Viewpoint
+#### Component and Connector View
 
-This view highlights the components of the Minitwit system and the specific network protocols (connectors) they use to interact:
+The following view describes the components of the Minitwit system and the specific network protocols (connectors) used for interaction:
 
 * **External Connectors:** The Traefik proxy component receives user traffic via HTTPS (TCP 443) and communicates with Let's Encrypt using the ACME protocol for automated TLS certificate management.
 * **Application Routing:** Traefik load-balances incoming requests to the 3 Minitwit Web Service components over HTTP (TCP 5001).
@@ -213,9 +209,9 @@ class L_DB db;
 class L_Ext ext;
 ```
 
-### Allocation 
+### Allocation Viewpoint
 
-#### Deployment
+#### Deployment View
 
 This is the deployment view for our 3-node Minitwit Swarm cluster:
 * **Cluster Topology:** The environment consists of 3 virtual machines. All act as Swarm Managers to maintain a highly available quorum, ensuring seamless leader election if a node fails.
@@ -379,35 +375,26 @@ This project’s core application is written in Go (1.25) using Gin for routing,
 
 <!-- e.g. make lint, golangci-lint, test coverage, integration-test strategy; optional trends or screenshots (store images under report/images/). -->
 
-To maintain code quality and reduce security risks, the project applies a multi-layered static analysis strategy covering all languages used in the system.
+We enforce code quality through a two-layered static analysis pipeline in GitHub Actions.
 
-**Layer 1: Language-specific linters** are integrated into the CI/CD pipeline via GitHub Actions:
-
-- `gofumpt`: automatically formats Go code and commits any style fixes
-- `golangci-lint`: performs comprehensive Go static analysis including security checks
+**Layer 1: Language-specific linters**
+These tools run on every pull request to catch syntax issues and enforce formatting:
+- `gofumpt`: automatically formats Go code and commits style fixes
+- `golangci-lint`: performs comprehensive Go static analysis and security checks
 - `hadolint`: enforces Dockerfile best practices
 - `htmlhint`: validates HTML structure
 - `yamllint`: checks YAML syntax and indentation
 
-Minor formatting issues are corrected automatically, while errors and security warnings cause the pipeline to fail with a clear message indicating the file and line number. These tools can also be run locally via `make lint`, ensuring developers receive the same feedback before pushing. Each tool is configurable, rules and thresholds can be adjusted to ignore specific warnings or tighten checks per project needs.
+Formatting issues are corrected automatically where possible. Errors or security warnings fail the pipeline with file and line number indicators. Developers can run `make lint` locally to receive the same feedback before pushing.
 
-**Layer 2: SonarQube Cloud** performs deeper cross-language analysis, scanning for bugs, security vulnerabilities and code smells. It is tightly integrated with GitHub, providing real-time feedback on pull requests.
-
-Together, these two layers act as a quality gate that all code must pass before deployment, reducing the risk of shipping defects or security issues and enforcing consistent coding standards throughout the project.
+**Layer 2: SonarQube Cloud**
+SonarQube performs deeper cross-language analysis to scan for bugs, security vulnerabilities and code smells. It is integrated with GitHub to provide real-time inline feedback on pull requests.
 
 <a id="process-perspective"></a>
 
-# Process
+# Process Perspective
 
-This perspective should clarify how code or other artifacts come from idea into the running system and everything that happens on the way.
-In particular, the following descriptions should be included:
-- A complete description and illustration of stages and tools included in the CI/CD pipelines, including deployment and release of your systems.
-- How do you monitor your systems and what precisely do you monitor?
-- What do you log in your systems and how do you aggregate logs?
-- Brief description of how you security hardened your systems.
-- How do you handle availability and scaling in your systems?
-
-<!-- Section bodies live under sections/*.md (one file per topic). @include lines are expanded when you run `make report` (report/main.template.md → report/main.md). -->
+This section describes the lifecycle of code from development to production. We outline the CI/CD pipeline, the observability stack for monitoring and logging, security measures and our approach to availability and scaling.
 
 ## CI/CD pipelines, deployment and release
 
@@ -428,7 +415,7 @@ The current operating model is therefore: **Terraform + Ansible for environment 
 
 <!-- What you monitor, which tools (Prometheus, Grafana, …), key metrics and dashboard links (may reference appendix). -->
 
-Monitoring is split across two tools,  Prometheus for metrics and Loki for logs,  both visualized through Grafana, with both datasources provisioned automatically on deployment (no manual setup required).
+Monitoring is split across two tools: Prometheus for metrics and Loki for logs. Both visualized through Grafana, with both datasources provisioned automatically on deployment (no manual setup required).
 
 ### Metrics (Prometheus)
 
@@ -471,7 +458,7 @@ Grafana's Explore view allows correlating a spike in a Prometheus graph with the
 
 <!-- What you log and how logs are aggregated (Loki, Promtail, …). -->
 
-The application emits one structured JSON log line per HTTP request to stdout, produced by a `LoggingMiddleware` built on Go's `slog` package. Writing to stdout requires no direct coupling to the log storage backend,  Docker captures container stdout automatically.
+The application emits one structured JSON log line per HTTP request to stdout, produced by a `LoggingMiddleware` built on Go's `slog` package. Writing to stdout requires no direct coupling to the log storage backend. Docker captures container stdout automatically.
 
 Each log entry contains the following fields:
 
@@ -479,7 +466,7 @@ Each log entry contains the following fields:
 |---|---|---|
 | `method` | `GET` | HTTP verb |
 | `path` | `/alice` | Raw request path |
-| `route` | `/:username` | Gin route template,  avoids high-cardinality labels |
+| `route` | `/:username` | Gin route template, avoids high-cardinality labels |
 | `status` | `200` | HTTP response status code |
 | `latency_ms` | `12` | Request duration in milliseconds |
 | `client_ip` | `1.2.3.4` | Originating IP (respects X-Forwarded-For) |
@@ -488,7 +475,7 @@ Each log entry contains the following fields:
 
 ### Log Aggregation
 
-**Promtail** runs as a `global` service in the Docker Swarm (one instance per node). It connects to the Docker daemon via the Unix socket (`/var/run/docker.sock`) and automatically discovers all running containers, tailing their stdout and stderr,  no hardcoded service names required.
+**Promtail** runs as a `global` service in the Docker Swarm (one instance per node). It connects to the Docker daemon via the Unix socket (`/var/run/docker.sock`) and automatically discovers all running containers, tailing their stdout and stderr, no hardcoded service names required.
 
 Each log line is forwarded to **Loki** with three labels:
 
@@ -525,25 +512,13 @@ Loki uses a single-node filesystem-backed setup with **7-day retention**. Logs a
 ```
 
 ## Security hardening
-<!-- Brief notes: authentication, TLS, network isolation, Basic Auth, secrets handling, etc. -->
 
-The system implements multiple layers of security to protect data, infrastructure and the application layer.
+Security is handled across the application, network and deployment pipeline:
 
-**Application Level (GORM)**
-To prevent SQL injection vulnerabilities we replaced raw SQL strings with GORM. GORM automatically uses parameterized queries for all database interactions (e.g. `db.Where("username = ?", username)`), ensuring user input is safely escaped.
-
-**Infrastructure Level (Firewalls & Network Isolation)**
-We use DigitalOcean firewalls provisioned via Terraform to strictly control network access. Only HTTP (port 80), HTTPS (port 443) and SSH (port 22) are exposed to the public internet. All internal cluster communication (Docker Swarm overlay networks, management traffic and database connections) is isolated to a private VPC.
-
-**Data in Transit (TLS)**
-Traefik is deployed as our ingress controller and handles TLS termination. It automatically provisions and renews SSL/TLS certificates via Let's Encrypt, enforcing secure HTTPS connections for all public traffic.
-
-**Configuration Management (Env files)**
-Configuration details that vary by environment are isolated in `.env` files. These files are dynamically generated by Terraform using private VPC IPs and deployed via Ansible directly to the server. They are excluded from version control to prevent accidental leaks.
-
-**Secret Management (GitHub Secrets)**
-Highly sensitive credentials such as SSH keys, Docker Hub tokens and the application secret key are stored in GitHub Secrets. They are injected securely into the CI/CD pipeline during the deployment phase, ensuring they are never hardcoded in the source code or accessible to unauthorized users.
-
+- **SQL Injection:** Raw SQL strings were replaced with GORM. It automatically parameterizes queries to prevent injection vulnerabilities.
+- **Network Isolation:** DigitalOcean firewalls restrict public ingress to HTTP and HTTPS. Internal Swarm traffic, SSH and the PostgreSQL database are isolated within a private VPC.
+- **TLS:** Traefik automatically provisions Let's Encrypt certificates for all public traffic.
+- **Secrets:** Environment variables are templated by Terraform. Highly sensitive credentials (SSH keys, Docker Hub tokens, application secrets) are injected exclusively via GitHub Secrets during CI/CD to keep them out of version control.
 
 ## Availability and scaling
 
@@ -557,7 +532,7 @@ When deploying a new version, Swarm performs a rolling update: each new replica 
 
 <a id="reflection-perspective"></a>
 
-# Reflection
+# Reflection Perspective
 ## Major issues, resolutions and lessons learned
 Initially each member ported part of the Python-to-Go rewrite alone, which left some disconnected; we fixed this by moving our most knowledgeable member to a pure peer-review role and holding weekly syncs.
 
@@ -574,7 +549,7 @@ We used generative AI for several tasks, with mixed results:
 - __Documentation:__ Generating documentation for new implementations, which we used in Thursday meetings to recap the week's work.
 - __As a documentation search engine:__ Querying specific, hard-to-understand parts of technologies instead of reading official docs. This sometimes worked well but sometimes produced unnecessarily complex suggestions.
 - __Boilerplate porting:__ Translating the routing layer from Python to Go.
-- __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear,  most usefully, the interactions between DigitalOcean's network, Docker's network and each VM's network.
+- __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear: most usefully, the interactions between DigitalOcean's network, Docker's network and each VM's network.
 
 <!-- around 286 words total -->
 

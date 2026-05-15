@@ -2,7 +2,7 @@
 
 <!-- What you log and how logs are aggregated (Loki, Promtail, …). -->
 
-The application emits one structured JSON log line per HTTP request to stdout, produced by a `LoggingMiddleware` built on Go's `slog` package. Writing to stdout requires no direct coupling to the log storage backend, Docker captures container stdout automatically.
+The application emits one structured JSON log line per HTTP request to stdout, produced by a `LoggingMiddleware` built on Go's `slog` package. Writing to stdout requires no direct coupling to the log storage backend. Docker captures container stdout automatically.
 
 Each log entry contains the following fields:
 

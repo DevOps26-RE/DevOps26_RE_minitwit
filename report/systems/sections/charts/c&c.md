@@ -1,6 +1,6 @@
 #### Component and Connector View
 
-This view highlights the components of the Minitwit system and the specific network protocols (connectors) they use to interact:
+The following view describes the components of the Minitwit system and the specific network protocols (connectors) used for interaction:
 
 * **External Connectors:** The Traefik proxy component receives user traffic via HTTPS (TCP 443) and communicates with Let's Encrypt using the ACME protocol for automated TLS certificate management.
 * **Application Routing:** Traefik load-balances incoming requests to the 3 Minitwit Web Service components over HTTP (TCP 5001).
