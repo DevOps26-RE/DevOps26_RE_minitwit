@@ -14,7 +14,6 @@
 
 ### Allocation Viewpoint
 
-#### Deployment View
 @include charts/deployment.md
 
 #### One Click Deployment Flow Chart
