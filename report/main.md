@@ -104,6 +104,18 @@ class PkgMain,PkgGin,PkgGorm,PkgPrometheus,CoreApplication packageStyle;
 
 
 ### Component and Connector Viewpoint
+#### Component and Connector View
+
+This view highlights the components of the Minitwit system and the specific network protocols (connectors) they use to interact:
+
+* **External Connectors:** The Traefik proxy component receives user traffic via HTTPS (TCP 443) and communicates with Let's Encrypt using the ACME protocol for automated TLS certificate management.
+* **Application Routing:** Traefik load-balances incoming requests to the 3 Minitwit Web Service components over HTTP (TCP 5001).
+* **Data Persistence:** The web application components interact with the standalone PostgreSQL database component using the native Postgres protocol (TCP 5432).
+* **Observability Connectors:**
+  * **Metrics (Pull):** The Prometheus component scrapes telemetry data via HTTP from the application (TCP 5001) and global Node Exporters (TCP 9100).
+  * **Logs (Push):** Promtail agents stream logs to the Loki component over HTTP (TCP 3100).
+  * **Visualization:** Grafana queries both Prometheus (TCP 9090) and Loki (TCP 3100) via HTTP to render dashboards.
+
 ```mermaid
 flowchart LR
     Client((Client))
@@ -169,7 +181,6 @@ flowchart LR
     class App_DB db;
     class LetsEncrypt ext;
 ```
-
 ```mermaid
 flowchart TB
 
@@ -206,24 +217,36 @@ class L_Ext ext;
 ### Allocation Viewpoint
 
 #### Deployment View
-### Minitwit Deployment Infrastructure (VPC Private Network)
+
+This is the deployment view for our 3-node Minitwit Swarm cluster:
+* **Cluster Topology:** The environment consists of 3 virtual machines. All act as Swarm Managers to maintain a highly available quorum, ensuring seamless leader election if a node fails.
+* **Workload Allocation:** 
+  * **Node 1:** Acts as the ingress node, hosting the Traefik proxy.
+  * **Node 1 & 2:** Host the distributed Minitwit application replicas.
+  * **Node 3:** Dedicated to the centralized observability stack (Grafana, Prometheus, Loki).
+  * **Global:** Promtail and Node Exporter agents are deployed universally across all three nodes.
+* **External Infrastructure:** The PostgreSQL database is deployed on a standalone instance outside the Swarm cluster, but remains secured within the same VPC.
+* **Network Infrastructure:**
+  * **Control Plane:** Swarm management and node discovery (TCP 2377, 7946) operate on a dedicated infrastructure bus.
+  * **Data Plane:** Inter-node container traffic is encapsulated via the Swarm Overlay network (UDP 4789), while intra-node traffic is routed directly through local network.
 
 ```mermaid
 flowchart LR
 Internet(("Internet\n(HTTPS Traffic)"))
 PostgresDB[("PostgresDB\n(Standalone)")]
 
-Overlay(["UDP 4789 (VXLAN Overlay)"])
-WebTraffic(["TCP 80/443 (Web Traffic)"])
+
+WebTraffic(["TCP 80/443\n (Web Traffic)"])
 SSH(["TCP 22 (SSH Remote)"]) ~~~
 MgmtBus(["TCP 2377 (Mgmt)<br/>TCP/UDP 7946 (Gossip)"])
 CnDB(["TCP 5432 (Connect to DB)"])
 
-subgraph SwarmCluster ["Swarm Cluster (VPC)"]
+subgraph SwarmCluster ["Swarm Cluster"]
     direction LR
-    
+    Overlay(["Swarm Overlay Network\n(Underlay: UDP 4789)"])
     subgraph Node1 ["Manager 1"]
         direction LR
+        NodeInternal(["Node Internal Network"])
         T1[Traefik] ~~~ P1[Promtail] ~~~ NE1[Node Exporter]
         W1[APP] ~~~ W2[APP]
     end
@@ -257,8 +280,9 @@ SSH -.-> SwarmCluster
 
 %% Overlay Networking (Inter-node Traffic)
 T1 ==> Overlay
-Overlay ==> W1
-Overlay ==> W2
+T1 ==> NodeInternal
+NodeInternal ==> W1
+NodeInternal ==> W2
 Overlay ==> W3
 
 %% Database Access Path
@@ -280,12 +304,9 @@ classDef bus fill:#fafafa,stroke:#616161,color:#424242,stroke-width:1px,stroke-d
 class Node1,Node2 ingress;
 class Node3 monitor;
 class PostgresDB db;
-class MgmtBus,CnDB,SSH,Overlay,WebTraffic bus;
+class MgmtBus,CnDB,SSH,Overlay,WebTraffic,NodeInternal bus;
 
 ```
-
-#### Graph Key & Legend
-
 ```mermaid
 %% Deployment Graph Key & Legend
 flowchart TB
@@ -353,11 +374,27 @@ sequenceDiagram
 
 ## Dependencies and technology stack
 
-<!-- List and briefly describe: languages, frameworks, DB, orchestration, IaC, CI platform, observability components, etc. -->
+This project’s core application is written in Go (1.25) using Gin for routing, Gin sessions for auth state, GORM with the PostgreSQL driver for persistence, and Prometheus client libraries for app metrics. The UI is server-rendered from HTML templates plus static assets. Locally and in CI, Docker Compose runs the app, PostgreSQL, Selenium, and Python-based integration tests. Production deployment uses Docker Swarm with Traefik as ingress and TLS termination. Infrastructure is managed as code with Terraform (DigitalOcean VPC, droplets, firewalls) and Ansible (Docker/Swarm bootstrap and deploy). Observability is handled by Prometheus, Loki, Promtail, Grafana, and node_exporter; CI/CD runs in GitHub Actions.
 
-## Static analysis and quality
+## Static Analysis and Quality
 
 <!-- e.g. make lint, golangci-lint, test coverage, integration-test strategy; optional trends or screenshots (store images under report/images/). -->
+
+To maintain code quality and reduce security risks, the project applies a multi-layered static analysis strategy covering all languages used in the system.
+
+**Layer 1 — Language-specific linters** are integrated into the CI/CD pipeline via GitHub Actions:
+
+- `gofumpt` — automatically formats Go code and commits any style fixes
+- `golangci-lint` — performs comprehensive Go static analysis including security checks
+- `hadolint` — enforces Dockerfile best practices
+- `htmlhint` — validates HTML structure
+- `yamllint` — checks YAML syntax and indentation
+
+Minor formatting issues are corrected automatically, while errors and security warnings cause the pipeline to fail with a clear message indicating the file and line number. These tools can also be run locally via `make lint`, ensuring developers receive the same feedback before pushing. Each tool is configurable — rules and thresholds can be adjusted to ignore specific warnings or tighten checks per project needs.
+
+**Layer 2 — SonarQube Cloud** performs deeper cross-language analysis, scanning for bugs, security vulnerabilities, and code smells. It is tightly integrated with GitHub, providing real-time feedback on pull requests.
+
+Together, these two layers act as a quality gate that all code must pass before deployment, reducing the risk of shipping defects or security issues and enforcing consistent coding standards throughout the project.
 
 <a id="process-perspective"></a>
 
@@ -375,15 +412,118 @@ In particular, the following descriptions should be included:
 
 ## CI/CD pipelines, deployment, and release
 
-<!-- Describe and illustrate stages (lint, test, build, deploy); staging vs production, tag-based releases, manual DB workflows, etc. -->
+Our delivery process evolved incrementally from manual operations to commit-driven automation:
+
+1. **Manual local phase (Python):** The project started as a local Python app with manual startup/testing. We used helper bash scripts for local control (legacy examples are still kept under `tmp/legacy/`).
+2. **Containerized but still manual:** We then introduced Docker, but builds and runs were still triggered manually on local machines.
+3. **Vagrant + DigitalOcean provisioning:** Next, we used `Vagrantfile`-based provisioning for droplets. Early provisioning relied on inline shell scripts (Docker install, DB/app startup, IP handoff via `db_ip.txt`), so deployment was cloud-based but still operator-driven.
+4. **Ansible replacing shell provisioning:** We migrated host setup and deployment logic into Ansible (`ansible/site.yml`, `ansible/roles/docker_app`), making bootstrap and re-runs more repeatable.
+5. **GitHub Actions CI/CD adoption:** We added commit-triggered automation in `.github/workflows/main.yml`, moving from manual build/deploy to pipeline-based quality gates, image build/push, and remote deployment.
+6. **Pipeline hardening and release split:** The pipeline matured into lint → test → build/push → deploy, with branch-aware image tags and PR traceability comments; releases were separated into `release.yml` (`v*` tags).
+7. **Environment separation + controlled DB updates:** We introduced stage/prod handling and a dedicated manual DB workflow (`deploy-db.yml`) because DB compose updates can cause brief downtime and require explicit operator intent.
+8. **Terraform + Ansible one-click bootstrap:** Finally, infrastructure provisioning moved to Terraform (`terraform/stage`, `terraform/production`), which generates inventory/env artifacts and triggers Ansible via `local-exec` to bootstrap a full environment.
+
+The current operating model is therefore: **Terraform + Ansible for environment creation/bootstrap**, and **GitHub Actions for ongoing application delivery per commit**. Historical files such as `Vagrantfile` and `Vagrantfile_staging` remain in the repository for process documentation but are no longer the primary deployment path.
 
 ## Monitoring
 
 <!-- What you monitor, which tools (Prometheus, Grafana, …), key metrics and dashboard links (may reference appendix). -->
 
+Monitoring is split across two tools — Prometheus for metrics and Loki for logs — both visualized through Grafana, with both datasources provisioned automatically on deployment (no manual setup required).
+
+### Metrics (Prometheus)
+
+Prometheus scrapes two targets every 15 seconds:
+
+- **Application** — the `/metrics` endpoint exposed on port 5001.
+- **Node Exporter** — running on every Swarm node, discovered via DNS service discovery (`tasks.node_exporter`).
+
+The application instruments two custom metrics via a `PrometheusMiddleware`:
+
+| Metric | Type | Labels | Purpose |
+|---|---|---|---|
+| `minitwit_http_requests_total` | Counter | `method`, `path`, `status` | Tracks total request volume; rate gives requests/sec |
+| `minitwit_http_request_duration_seconds` | Histogram | `method`, `path` | Bucketed from 10ms to 10s; enables p50/p95/p99 calculations |
+
+The route template (e.g. `/:username`) is used instead of the raw path to prevent unbounded label cardinality. Node Exporter provides host-level metrics including CPU and memory utilisation.
+
+### Visualization (Grafana)
+
+Two dashboards are maintained:
+
+**Metrics dashboard** (Prometheus datasource):
+
+- **CPU utilisation** — shows host CPU usage over time per node; helps detect runaway processes or traffic spikes. A color indicator reflects current consumption: green (healthy), yellow (moderate), red (critical).
+- **Memory utilisation** — tracks RAM usage per node; useful for catching memory leaks. Same green/yellow/red color coding indicates current memory pressure at a glance.
+- **HTTP request rate** — derived from `minitwit_http_requests_total`; shows how many requests/sec the app is handling.
+- **Average & p95 response time** — derived from the duration histogram; p95 highlights tail latency that averages would hide.
+- **Successful requests** — counts 2xx responses; a sudden drop signals an outage or regression.
+- **Traffic by endpoint** — breaks request rate down by route template; reveals which endpoints are under the most load.
+
+**Log dashboard** (Loki datasource):
+
+- **Overall traffic** — log volume over time across all services; a quick sanity-check for whether the app is receiving requests.
+- **Database errors** — filters for error-level log lines from the `db` service; these panels may not function correctly due to incomplete error handling in the application code.
+- **Service errors** — filters for error-level log lines from the web service; same caveat applies.
+
+Grafana's Explore view allows correlating a spike in a Prometheus graph with the corresponding Loki log lines from the same time window, enabling faster incident investigation.
+
 ## Logging
 
 <!-- What you log and how logs are aggregated (Loki, Promtail, …). -->
+
+The application emits one structured JSON log line per HTTP request to stdout, produced by a `LoggingMiddleware` built on Go's `slog` package. Writing to stdout requires no direct coupling to the log storage backend — Docker captures container stdout automatically.
+
+Each log entry contains the following fields:
+
+| Field | Example | Description |
+|---|---|---|
+| `method` | `GET` | HTTP verb |
+| `path` | `/alice` | Raw request path |
+| `route` | `/:username` | Gin route template — avoids high-cardinality labels |
+| `status` | `200` | HTTP response status code |
+| `latency_ms` | `12` | Request duration in milliseconds |
+| `client_ip` | `1.2.3.4` | Originating IP (respects X-Forwarded-For) |
+| `user_agent` | `Mozilla/5.0 …` | Browser or client identifier |
+| `bytes_out` | `1024` | Response body size in bytes |
+
+### Log Aggregation
+
+**Promtail** runs as a `global` service in the Docker Swarm (one instance per node). It connects to the Docker daemon via the Unix socket (`/var/run/docker.sock`) and automatically discovers all running containers, tailing their stdout and stderr — no hardcoded service names required.
+
+Each log line is forwarded to **Loki** with three labels:
+
+- **`service`** — Docker Compose service name (e.g. `web`). Used to scope queries to a single service, e.g. `{service="web"}`.
+- **`container`** — Full container name (e.g. `minitwit-web-1`). Useful when multiple replicas run side by side and you need to isolate one instance.
+- **`stream`** — Either `stdout` or `stderr`. Allows filtering out noisy stderr from libraries while keeping application logs clean.
+
+These low-cardinality labels keep Loki queries efficient.
+
+### Storage & Querying
+
+Loki uses a single-node filesystem-backed setup with **7-day retention**. Logs are queryable via LogQL. The following queries are used in the Grafana dashboards:
+
+```logql
+# All logs from the web service
+{service="minitwit_web"}
+
+# All logs from any web container replica (regex match)
+{container=~"minitwit_web.*"}
+
+# Server errors (status >= 500)
+{service="web"} | json | status >= 500
+
+# Slow requests (latency > 1 second)
+{service="web"} | json | latency_ms > 1000
+
+# Error-level log lines
+{service="minitwit_web"} | json | level =~ `(?i)error`
+{service="db"} | json | level =~ `(?i)error`
+
+# Timeout events
+{service="minitwit_web"} |= "timeout"
+{service="db"} |= "timeout"
+```
 
 ## Security hardening
 
@@ -402,43 +542,26 @@ When deploying a new version, Swarm performs a rolling update: each new replica 
 <a id="reflection-perspective"></a>
 
 # Reflection Perspective
-
-Describe the biggest issues, how you solved them, and which are major lessons learned with regards to:
-- evolution and refactoring
-- operation, and
-- maintenance
-of your ITU-MiniTwit systems. Link back to respective commit messages, issues, tickets, etc. to illustrate these.
-
-Also reflect and describe what was the "DevOps" style of your work. For example, what did you do differently to previous development projects and how did it work?
-
-Use of Generative AI
-
-ITU's rules on the use of generative AI apply for this report too. They are described here and in detail here. Please follow them. For your report that means that you have to state which generative AI tools have been used for which task(s) in your projects. Additionally, describe how generative AI tools have been used and briefly reflect and discuss how they supported or hindered your work process.
-
-
-<!-- Cover: major issues and how you solved them; lessons on evolution/refactoring, operation, and maintenance. Link to commits, issues, tickets. Reflect on your DevOps-style work vs previous projects. -->
-
 ## Major issues, resolutions, and lessons learned
-
-### Evolution and refactoring
-
-<!-- Link: relevant commits / PRs / issues. -->
-
-### Operation
-
-<!-- Link: on-call, incidents, alerts (if any). -->
+Initially each member ported part of the Python-to-Go rewrite alone, which left some disconnected; we fixed this by moving our most knowledgeable member to a pure peer-review role and holding weekly syncs.
 
 ### Maintenance
+Our biggest failure was the Compose-to-Swarm migration: the deploy automation had only ever worked against Compose, so the cutover broke live and took four successive fixes to stabilise [#36–#39]. The deeper cause was treating the migration itself as the first real test of the new automation. Lesson: major infrastructure changes need a deployment path proven on staging first, and shared edge components like Traefik must be decoupled so they survive migrations.
 
-<!-- Link: technical debt, documentation, dependency upgrades, etc. -->
+### DevOps-style work compared to earlier projects
+Unlike earlier projects, a CI/CD pipeline ran analysis, staging deployment, and tests on every PR <!-- We might want to link to the actual PR in which this was implemented? -->, making integration continuous rather than last-minute.
+Generative AI. Used for boilerplate route porting, documentation, and as a searchable interface to our own codebase; results were useful but occasionally over-complex.
 
-## DevOps-style work compared to earlier projects
+### Use of Generative AI
+We used generative AI for several tasks, with mixed results:
 
-<!-- e.g. automation, small batches, IaC, observability-first practices. -->
+- __Documentation:__ Generating documentation for new implementations, which we used in Thursday meetings to recap the week's work.
+- __As a documentation search engine:__ Querying specific, hard-to-understand parts of technologies instead of reading official docs. This sometimes worked well but sometimes produced unnecessarily complex suggestions.
+- __Boilerplate porting:__ Translating the routing layer from Python to Go.
+- __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear — most usefully, the interactions between DigitalOcean's network, Docker's network, and each VM's network.
 
-## Use of Generative AI
+<!-- around 286 words total -->
 
-<!-- e.g. how we use ai. -->
 <a id="appendix"></a>
 
 # Appendix — Linked artifacts
