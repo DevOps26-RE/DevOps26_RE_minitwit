@@ -16,6 +16,5 @@
 
 @include charts/deployment.md
 
-#### One Click Deployment Flow Chart
 @include charts/flow_chart.md
 

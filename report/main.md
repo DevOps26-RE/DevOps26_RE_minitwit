@@ -1,27 +1,4 @@
-# ITU-MiniTwit: Final Report (Main Index)
-
-<!-- Formal requirements checklist (verify against the full course brief before writing / exporting PDF):
-  - Maximum ~2500 words for the final report; figures do not count toward the word limit.
-  - Sources must be in a markup language (this repo uses Markdown) and version-controlled here.
-  - Place all report images under report/images/ (e.g. report/images/demo.gif).
-  - CI must build a single PDF from the report sources into report/build/, filename must match: MSc_group_[a-z].pdf (e.g. MSc_group_a.pdf).
-  - Link and briefly describe constitutional artifacts: repos, issue trackers, monitoring/logging, etc. (see appendix after expansion).
--->
-
-<!-- Edit this file (main.template.md). Run `make report` to expand @include lines into report/main.md for PDF/GitHub preview. -->
-
-## Abstract
-
-<!-- One short paragraph. You may draft this after the body is complete. -->
-
-## Outline
-
-| Perspective | Topics |
-|-------------|--------|
-| [System](#system-perspective) | Architecture, dependencies, static analysis and quality |
-| [Process](#process-perspective) | CI/CD, monitoring, logging, security, availability and scaling |
-| [Reflection](#reflection-perspective) | Issues and lessons, evolution/ops/maintenance, DevOps-style work |
-| [Appendix](#appendix) | External artifact links |
+# ITU-MiniTwit: Final Report
 
 <a id="system-perspective"></a>
 
@@ -37,6 +14,14 @@ This section details the architecture, dependencies and quality assessment of th
 <!-- Describe and illustrate: service boundaries, data flows, deployment topology (Swarm / node roles), main components (app, DB, Traefik, observability stack, etc.). -->
 
 ### Module Viewpoint
+### Module View
+
+This view illustrates the static package structure and dependency flow of the Minitwit codebase, adhering to Clean Architecture principles:
+
+* **Core Application:** Encapsulates the pure business logic and domain entities (`User`, `Follower`, `Message`, `Application State`). It remains strictly isolated and framework-agnostic.
+* **External Frameworks:** Infrastructure packages (`Gin` for HTTP routing, `Gorm` for database ORM, and `Prometheus` for metrics) depend *inward* on the Core Application. This ensures the domain logic is completely decoupled from specific technology choices.
+* **Main Package:** Acts as the application's entry point, wiring up the necessary dependencies and triggering the core logic.
+
 ```mermaid
 flowchart TB
 %% ==========================================
@@ -330,7 +315,15 @@ class L_DB db;
 class L_FW bus;
 
 ```
-#### One Click Deployment Flow Chart
+#### One-Click Deployment Pipeline
+
+This sequence diagram illustrates our automated, end-to-end deployment process:
+
+* **Infrastructure Provisioning:** Terraform initializes and provisions the core infrastructure (Virtual Machines and firewalls) on DigitalOcean.
+* **Dynamic Configuration:** Terraform automatically generates the required Ansible inventory (`.ini`) and environment variables (`.env`) locally based on the provisioned resources.
+* **Automated Handoff:** Terraform seamlessly triggers the Ansible playbook execution.
+* **Cluster Setup & Deployment:** Ansible reads the generated configurations to bootstrap the Docker Swarm cluster and deploy the application stack (along with the standalone database) directly onto the virtual machines.
+
 ```mermaid
 
 sequenceDiagram
@@ -602,30 +595,3 @@ We used generative AI for several tasks, with mixed results:
 - __Understanding our own codebase:__ Feeding the full codebase to AI to "interview" it about behaviour we found unclear: most usefully, the interactions between DigitalOcean's network, Docker's network and each VM's network.
 
 <!-- around 286 words total -->
-
-<a id="appendix"></a>
-
-# Appendix: Linked artifacts
-Just a placeholder for now
-<!-- List each constitutional artifact with a one-line description and URL. Replace placeholders with your real links. -->
-
-## Source code and version control
-
-<!-- - Main repository: ... -->
-
-## Issue tracking
-
-<!-- - GitHub Issues / Projects: ... -->
-
-## Monitoring, logging and dashboards
-
-<!-- - Grafana: ... -->
-<!-- - If not public, describe how reviewers can access it. -->
-
-## Other
-
-<!-- - Simulator API docs, course wiki, additional documentation repos, etc. -->
-
-## Figures and illustrations
-
-<!-- Use relative paths from report/main.md after expansion, e.g. ![Demo](images/demo.gif) -->
