@@ -22,64 +22,7 @@ This view illustrates the static package structure and dependency flow of the Mi
 * **External Frameworks:** Infrastructure packages (`Gin` for HTTP routing, `Gorm` for database ORM, and `Prometheus` for metrics) depend *inward* on the Core Application. This ensures the domain logic is completely decoupled from specific technology choices.
 * **Main Package:** Acts as the application's entry point, wiring up the necessary dependencies and triggering the core logic.
 
-```mermaid
-flowchart TB
-%% ==========================================
-%% Define Folders using Subgraphs with invisible nodes
-%% ==========================================
-
-subgraph PkgMain ["Main"]
-N_Main[" "]
-end
-
-subgraph CoreApplication ["Core Application"]
-direction TB
-User[User]
-Follower[Follower]
-Message[Message]
-ApplicationState[Application State]
-
-%% Internal dependencies
-User --> Follower
-User --> Message
-end
-
-subgraph PkgGin ["Gin"]
-N_Gin[" "]
-end
-
-subgraph PkgGorm ["Gorm"]
-N_Gorm[" "]
-end
-
-subgraph PkgPrometheus ["Prometheus"]
-N_Prom[" "]
-end
-
-%% ==========================================
-%% Dependencies 
-%% ==========================================
-
-%% Main entry point triggers User logic
-PkgMain --> User
-
-%% Frameworks depending on Core Application (Clean Architecture inward flow)
-PkgGin --> CoreApplication
-PkgGorm --> CoreApplication
-PkgPrometheus --> CoreApplication
-
-%% ==========================================
-%% FOLDER HACK: Make inner nodes completely invisible
-%% ==========================================
-style N_Main fill:none,stroke:none,color:transparent
-style N_Gin fill:none,stroke:none,color:transparent
-style N_Gorm fill:none,stroke:none,color:transparent
-style N_Prom fill:none,stroke:none,color:transparent
-
-%% Style the subgraphs to look more like solid packages
-classDef packageStyle fill:#f8f9fa,stroke:#adb5bd,stroke-width:2px,color:#212529;
-class PkgMain,PkgGin,PkgGorm,PkgPrometheus,CoreApplication packageStyle;
-```
+![Module view diagram](images/main-mermaid-01.svg)
 
 
 
@@ -96,103 +39,9 @@ The following view describes the components of the Minitwit system and the speci
   * **Logs (Push):** Promtail agents stream logs to the Loki component over HTTP (TCP 3100).
   * **Visualization:** Grafana queries both Prometheus (TCP 9090) and Loki (TCP 3100) via HTTP to render dashboards.
 
-```mermaid
-flowchart LR
-    Client((Client))
-    LetsEncrypt(("Let's Encrypt\n(External CA)"))
+![Component and connector view diagram](images/main-mermaid-02.svg)
 
-    subgraph TraefikIngress ["Traefik Ingress"]
-        Proxy["Traefik Reverse Proxy\n(TLS Termination & Routing)"]
-    end
-
-    subgraph AppNet ["App (app-net)"]
-        App_Web["Minitwit Web Service\n(replicas: 3)"]
-    end
-
-    subgraph VPCInfra ["VPC Infrastructure (Non-Swarm)"]
-        App_DB[("PostgreSQL Database\n(Standalone Compose)")]
-    end
-
-    subgraph Monitoring ["Monitoring and Logging (app-net)"]
-        direction TB
-        App_Grafana["Grafana"]
-        App_Prometheus["Prometheus"]
-        App_Loki["Loki"]
-
-        Agent_Promtail["Promtail (Global)"]
-        Agent_NodeExp["Node Exporter (Global)"]
-    end
-
-%% External Traffic & TLS
-    Client -->|"HTTPS [TCP: 443]"| Proxy
-    Client -.->|"HTTP [TCP: 80]\n(Redirect)"| Proxy
-    Proxy <-->|"ACME Protocol\n(Auto Cert Renewal)"| LetsEncrypt
-
-%% Traefik Routing
-    Proxy ==>|"HTTP [TCP: 5001]\nLoad Balanced"| App_Web
-    Proxy -->|"HTTP [TCP: 3000]\nPathPrefix(`/grafana`)"| App_Grafana
-
-%% Database Connection (Leaving Overlay, entering VPC)
-    App_Web ==>|"PostgreSQL\n[TCP: 5432]"| App_DB
-
-%% Monitoring Data Flow (Grafana Querying)
-    App_Grafana -.->|"HTTP [TCP: 9090]\nQuery Metric"| App_Prometheus
-    App_Grafana -.->|"HTTP [TCP: 3100]\nQuery Log"| App_Loki
-
-%% Monitoring Data Flow (Prometheus Scraping)
-    App_Prometheus -.->|"HTTP [TCP: 5001]"| App_Web
-    App_Prometheus -.->|"HTTP [TCP: 9100]"| Agent_NodeExp
-
-%% Monitoring Data Flow (Promtail Pushing)
-    Agent_Promtail -.->|"HTTP [TCP: 3100]\nPush Logs"| App_Loki
-
-%% Styles
-    classDef proxy fill:#ffe0b2,stroke:#f57c00,color:#000000,stroke-width:2px;
-    classDef app fill:#c8e6c9,stroke:#388e3c,color:#000000,stroke-width:2px;
-    classDef monitor fill:#e1bee7,stroke:#8e24aa,color:#000000,stroke-width:2px;
-    classDef agent fill:#cfd8dc,stroke:#455a64,color:#000000,stroke-width:2px;
-    classDef db fill:#bbdefb,stroke:#1976d2,color:#000000,stroke-width:2px;
-    classDef ext fill:#eceff1,stroke:#607d8b,color:#000000,stroke-dasharray: 5 5;
-
-    class Proxy proxy;
-    class App_Web app;
-    class App_Grafana,App_Prometheus,App_Loki monitor;
-    class Agent_Promtail,Agent_NodeExp agent;
-    class App_DB db;
-    class LetsEncrypt ext;
-```
-```mermaid
-flowchart TB
-
-%% Line definitions
-L1(A) ==>|"Thick Line:\n Business Data Flow"| L2(B)
-L3(C) -->|"Normal Line:\n Web Traffic Routing"| L4(D)
-L5(E) -.->|"Dashed Line:\n Monitoring / Logging "| L6(F)
-
-%% Shape and Component Style definitions linked with invisible lines for vertical alignment
-L_Proxy[Traefik Proxy Role]
-L_Proxy ~~~ L_App[Application Web Role]
-L_Monitor[Monitoring Stack Role]
-L_Monitor ~~~ L_Agent[Global Agent Role]
-L_DB[(Database Role)]
-L_DB ~~~ L_Ext((External Entity))
-
-%% Duplicated Style Definitions matching the main diagram
-classDef proxy fill:#ffe0b2,stroke:#f57c00,color:#000000,stroke-width:2px;
-classDef app fill:#c8e6c9,stroke:#388e3c,color:#000000,stroke-width:2px;
-classDef monitor fill:#e1bee7,stroke:#8e24aa,color:#000000,stroke-width:2px;
-classDef agent fill:#cfd8dc,stroke:#455a64,color:#000000,stroke-width:2px;
-classDef db fill:#bbdefb,stroke:#1976d2,color:#000000,stroke-width:2px;
-classDef ext fill:#eceff1,stroke:#607d8b,color:#000000,stroke-dasharray: 5 5;
-
-%% Binding styles
-class L_Proxy proxy;
-class L_App app;
-class L_Monitor monitor;
-class L_Agent agent;
-class L_DB db;
-class L_Ext ext;
-```
+![Component and connector legend](images/main-mermaid-03.svg)
 
 ### Allocation Viewpoint
 
@@ -210,111 +59,9 @@ This is the deployment view for our 3-node Minitwit Swarm cluster:
   * **Control Plane:** Swarm management and node discovery (TCP 2377, 7946) operate on a dedicated infrastructure bus.
   * **Data Plane:** Inter-node container traffic is encapsulated via the Swarm Overlay network (UDP 4789), while intra-node traffic is routed directly through local network.
 
-```mermaid
-flowchart LR
-Internet(("Internet\n(HTTPS Traffic)"))
-PostgresDB[("PostgresDB\n(Standalone)")]
+![Deployment view diagram](images/main-mermaid-04.svg)
 
-
-WebTraffic(["TCP 80/443\n (Web Traffic)"])
-SSH(["TCP 22 (SSH Remote)"]) ~~~
-MgmtBus(["TCP 2377 (Mgmt)<br/>TCP/UDP 7946 (Gossip)"])
-CnDB(["TCP 5432 (Connect to DB)"])
-
-subgraph SwarmCluster ["Swarm Cluster"]
-    direction LR
-    Overlay(["Swarm Overlay Network\n(Underlay: UDP 4789)"])
-    subgraph Node1 ["Manager 1"]
-        direction LR
-        NodeInternal(["Node Internal Network"])
-        T1[Traefik] ~~~ P1[Promtail] ~~~ NE1[Node Exporter]
-        W1[APP] ~~~ W2[APP]
-    end
-        
-    subgraph Node2 ["Manager 2"]
-        direction TB
-        P2[Promtail] ~~~ NE2[Node Exporter] ~~~ W3[APP]
-    end
-    
-    subgraph Node3 ["DB/Monitoring"]
-        direction TB
-        Lok[Loki] 
-        P3[Promtail]
-        Graf[Grafana]
-        Prom[Prometheus]
-        NE3[Node Exporter]
-        end
-end
-
-%% Cluster Internal Communication
-Node1 <==> MgmtBus
-Node2 <==> MgmtBus
-Node3 <==> MgmtBus
-
-%% External Entry Points (Routing through Firewall)
-Internet ==> WebTraffic
-WebTraffic ==> T1
-
-Internet -.-> SSH
-SSH -.-> SwarmCluster
-
-%% Overlay Networking (Inter-node Traffic)
-T1 ==> Overlay
-T1 ==> NodeInternal
-NodeInternal ==> W1
-NodeInternal ==> W2
-Overlay ==> W3
-
-%% Database Access Path
-W1 -.-> CnDB
-W2 -.-> CnDB
-W3 -.-> CnDB
-CnDB -.-> PostgresDB
-
-
-
-
-
-%% Styles
-classDef ingress fill:#e1f5fe,stroke:#0288d1,color:#000000;
-classDef monitor fill:#f3e5f5,stroke:#7b1fa2,color:#000000;
-classDef db fill:#bbdefb,stroke:#1976d2,color:#000000,stroke-width:2px;
-classDef bus fill:#fafafa,stroke:#616161,color:#424242,stroke-width:1px,stroke-dasharray: 5 5;
-
-class Node1,Node2 ingress;
-class Node3 monitor;
-class PostgresDB db;
-class MgmtBus,CnDB,SSH,Overlay,WebTraffic,NodeInternal bus;
-
-```
-```mermaid
-%% Deployment Graph Key & Legend
-flowchart TB
-
-%% Line definitions
-L1(A) ==>|"Thick Line:\n User Traffic"| L2(C)
-L3(B) -.->|"Dashed Line:\n Management\n / DB Traffic"| L4(D)
-
-%% Shape and Style definitions (Removed quotes inside brackets to fix parse error)
-L_DB[(Database Storage)]
-L_FW([Security / Firewall Rule])
-L_Ingress[Application / Ingress Nodes]
-L_Monitor[DB / Monitoring Nodes]
-
-%% Duplicated Style Definitions
-classDef ingress fill:#e1f5fe,stroke:#0288d1,color:#000000;
-classDef monitor fill:#f3e5f5,stroke:#7b1fa2,color:#000000;
-classDef db fill:#bbdefb,stroke:#1976d2,color:#000000,stroke-width:2px;
-classDef bus fill:#fafafa,stroke:#616161,color:#424242,stroke-width:1px,stroke-dasharray: 5 5;
-
-
-%% Binding styles
-class L_Ingress ingress;
-class L_Monitor monitor;
-class L_DB db;
-class L_FW bus;
-
-```
+![Deployment view legend](images/main-mermaid-05.svg)
 #### One-Click Deployment Pipeline
 
 This sequence diagram illustrates our automated, end-to-end deployment process:
@@ -324,41 +71,7 @@ This sequence diagram illustrates our automated, end-to-end deployment process:
 * **Automated Handoff:** Terraform seamlessly triggers the Ansible playbook execution.
 * **Cluster Setup & Deployment:** Ansible reads the generated configurations to initiate the Docker Swarm cluster and deploy the application stack (along with the database) directly onto the virtual machines.
 
-```mermaid
-
-sequenceDiagram
-%% Define participants
-    participant Terraform
-    participant DigitalOcean
-    participant .ini
-    participant .env
-    participant Ansible
-    participant VirtualMachines
-
-%% Trigger Init/Apply
-    Note left of Terraform: Terraform Init Apply
-    activate Terraform
-
-%% Terraform creates infrastructure on Digital Ocean
-    Terraform->>DigitalOcean: Create Virtual Machines
-    Terraform->>DigitalOcean: Create Firewalls
-
-%% Terraform writes local files
-    Terraform->>.ini: Generate Ansible Inventory file
-    Terraform->>.env: Generate Env File
-
-%% Terraform triggers Ansible Playbook
-    Terraform->>Ansible: Run Ansible Playbook
-    deactivate Terraform
-
-%% Ansible sets up the VMs
-    activate Ansible
-    Ansible->>.ini: Read Inventory file
-    Ansible->>VirtualMachines: Setup Docker Swarm Cluster
-    Ansible->>.env: Read Environment Variables
-    Ansible->>VirtualMachines: Run Docker Compose DB And Stack Yaml
-    deactivate Ansible
-```
+![One-click deployment pipeline sequence diagram](images/main-mermaid-06.svg)
 
 ## Dependencies and technology stack
 

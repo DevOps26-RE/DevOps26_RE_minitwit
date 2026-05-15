@@ -26,26 +26,30 @@ CnDB(["TCP 5432 (Connect to DB)"])
 subgraph SwarmCluster ["Swarm Cluster"]
     direction LR
     Overlay(["Swarm Overlay Network\n(Underlay: UDP 4789)"])
-    subgraph Node1 ["Manager 1"]
+    subgraph ClusterNodes [" "]
         direction LR
-        NodeInternal(["Node Internal Network"])
-        T1[Traefik] ~~~ P1[Promtail] ~~~ NE1[Node Exporter]
-        W1[APP] ~~~ W2[APP]
-    end
-        
-    subgraph Node2 ["Manager 2"]
-        direction TB
-        P2[Promtail] ~~~ NE2[Node Exporter] ~~~ W3[APP]
-    end
-    
-    subgraph Node3 ["DB/Monitoring"]
-        direction TB
-        Lok[Loki] 
-        P3[Promtail]
-        Graf[Grafana]
-        Prom[Prometheus]
-        NE3[Node Exporter]
+        subgraph Node1 ["Manager 1"]
+            direction LR
+            NodeInternal(["Node Internal Network"])
+            T1[Traefik] ~~~ P1[Promtail] ~~~ NE1[Node Exporter]
+            W1[APP] ~~~ W2[APP]
         end
+
+        subgraph Node2 ["Manager 2"]
+            direction TB
+            P2[Promtail] ~~~ NE2[Node Exporter] ~~~ W3[APP]
+        end
+
+        subgraph Node3 ["DB/Monitoring"]
+            direction TB
+            Lok[Loki] 
+            P3[Promtail]
+            Graf[Grafana]
+            Prom[Prometheus]
+            NE3[Node Exporter]
+        end
+        end
+    Overlay ~~~ ClusterNodes
 end
 
 %% Cluster Internal Communication
