@@ -2,14 +2,14 @@
 
 <!-- What you monitor, which tools (Prometheus, Grafana, …), key metrics and dashboard links (may reference appendix). -->
 
-Monitoring is split across two tools — Prometheus for metrics and Loki for logs — both visualized through Grafana, with both datasources provisioned automatically on deployment (no manual setup required).
+Monitoring is split across two tools: Prometheus for metrics and Loki for logs. Both visualized through Grafana, with both datasources provisioned automatically on deployment (no manual setup required).
 
 ### Metrics (Prometheus)
 
 Prometheus scrapes two targets every 15 seconds:
 
-- **Application** — the `/metrics` endpoint exposed on port 5001.
-- **Node Exporter** — running on every Swarm node, discovered via DNS service discovery (`tasks.node_exporter`).
+- **Application**: the `/metrics` endpoint exposed on port 5001.
+- **Node Exporter**: running on every Swarm node, discovered via DNS service discovery (`tasks.node_exporter`).
 
 The application instruments two custom metrics via a `PrometheusMiddleware`:
 
@@ -26,17 +26,17 @@ Two dashboards are maintained:
 
 **Metrics dashboard** (Prometheus datasource):
 
-- **CPU utilisation** — shows host CPU usage over time per node; helps detect runaway processes or traffic spikes. A color indicator reflects current consumption: green (healthy), yellow (moderate), red (critical).
-- **Memory utilisation** — tracks RAM usage per node; useful for catching memory leaks. Same green/yellow/red color coding indicates current memory pressure at a glance.
-- **HTTP request rate** — derived from `minitwit_http_requests_total`; shows how many requests/sec the app is handling.
-- **Average & p95 response time** — derived from the duration histogram; p95 highlights tail latency that averages would hide.
-- **Successful requests** — counts 2xx responses; a sudden drop signals an outage or regression.
-- **Traffic by endpoint** — breaks request rate down by route template; reveals which endpoints are under the most load.
+- **CPU utilisation**: shows host CPU usage over time per node; helps detect runaway processes or traffic spikes. A color indicator reflects current consumption: green (healthy), yellow (moderate), red (critical).
+- **Memory utilisation**: tracks RAM usage per node; useful for catching memory leaks. Same green/yellow/red color coding indicates current memory pressure at a glance.
+- **HTTP request rate**: derived from `minitwit_http_requests_total`; shows how many requests/sec the app is handling.
+- **Average & p95 response time**: derived from the duration histogram; p95 highlights tail latency that averages would hide.
+- **Successful requests**: counts 2xx responses; a sudden drop signals an outage or regression.
+- **Traffic by endpoint**: breaks request rate down by route template; reveals which endpoints are under the most load.
 
 **Log dashboard** (Loki datasource):
 
-- **Overall traffic** — log volume over time across all services; a quick sanity-check for whether the app is receiving requests.
-- **Database errors** — filters for error-level log lines from the `db` service; these panels may not function correctly due to incomplete error handling in the application code.
-- **Service errors** — filters for error-level log lines from the web service; same caveat applies.
+- **Overall traffic**: log volume over time across all services; a quick sanity-check for whether the app is receiving requests.
+- **Database errors**: filters for error-level log lines from the `db` service; these panels may not function correctly due to incomplete error handling in the application code.
+- **Service errors**: filters for error-level log lines from the web service; same caveat applies.
 
 Grafana's Explore view allows correlating a spike in a Prometheus graph with the corresponding Loki log lines from the same time window, enabling faster incident investigation.
